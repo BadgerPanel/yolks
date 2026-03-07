@@ -58,7 +58,6 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.lower-repo.outputs.repository }}/yolks:bot_${{ matrix.tag }}
-            ${{ github.repository_owner == 'pelican-eggs' && format('ghcr.io/parkervcp/yolks:bot_{0}', matrix.tag) || '' }}
       - name: Move cache
         run: |
           rm -rf /tmp/.buildx-cache
@@ -90,4 +89,3 @@ jobs:
   #         platforms: linux/amd64
   #         push: true
   #         tags: |
-  #           ${{ github.repository_owner == 'pelican-eggs' && format('ghcr.io/parkervcp/yolks:bot_{0}', matrix.tag) || '' }}
