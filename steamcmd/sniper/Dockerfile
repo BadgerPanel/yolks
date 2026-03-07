@@ -8,9 +8,9 @@ LABEL       org.opencontainers.image.description SteamRT3 Platform image for Pte
 
 # Install required packages
 RUN         dpkg --add-architecture i386 \
-            && apt update \
-            && apt upgrade -y \
-            && apt install -y \
+            && apt-get update \
+            && apt-get upgrade -y \
+            && apt-get install -y --no-install-recommends \
                 tar \
                 curl \
                 gcc \
@@ -18,7 +18,6 @@ RUN         dpkg --add-architecture i386 \
                 lib32gcc-s1 \
                 libgcc1 \
                 libcurl4-gnutls-dev:i386 \
-                libssl1.1:i386 \
                 libcurl4:i386 \
                 lib32tinfo6 \
                 libtinfo6:i386 \
@@ -30,15 +29,16 @@ RUN         dpkg --add-architecture i386 \
                 libsdl2-2.0-0 \
                 iproute2 \
                 gdb \
-                libsdl1.2debian \
                 libfontconfig1 \
                 telnet \
                 net-tools \
-                netcat \
+                netcat-openbsd \
                 tzdata \
                 xvfb \
                 tini \
-                libc6
+                libc6 \
+            && apt-get clean \
+            && rm -rf /var/lib/apt/lists/*
 
 # Install rcon
 RUN         cd /tmp/ \
