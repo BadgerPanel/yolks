@@ -36,8 +36,7 @@ RUN         apk add --no-cache \
                 libc6-compat \
                 tini
 
-# updating npm 
-RUN         npm install npm@latest -g
+# npm comes with node, no need to update separately
 
 # download cloudflared
 ARG         TARGETPLATFORM
