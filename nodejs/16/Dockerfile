@@ -3,7 +3,7 @@ FROM        --platform=$TARGETOS/$TARGETARCH node:16-bookworm-slim
 LABEL       author="Michael Parker" maintainer="parker@pterodactyl.io"
 
 # add container user and set stop signal
-RUN         useradd -m -d /home/container container
+RUN         (userdel node 2>/dev/null; userdel mongodb 2>/dev/null; userdel redis 2>/dev/null; true) && useradd -u 1000 -m -d /home/container -s /bin/bash container
 STOPSIGNAL  SIGINT
 
 RUN         apt update \

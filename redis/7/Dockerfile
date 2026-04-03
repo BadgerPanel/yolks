@@ -10,7 +10,7 @@ ENV     DEBIAN_FRONTEND=noninteractive
 RUN     apt -y update && \
         apt -y upgrade && \
         apt -y install iproute2 && \
-        useradd -d /home/container -m container -s /bin/bash
+        (userdel node 2>/dev/null; userdel mongodb 2>/dev/null; userdel redis 2>/dev/null; true) && useradd -u 1000 -d /home/container -m container -s /bin/bash
 
 USER    container
 ENV     USER=container HOME=/home/container

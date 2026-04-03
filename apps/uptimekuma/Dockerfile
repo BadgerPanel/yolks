@@ -49,7 +49,7 @@ RUN         chmod +x /usr/bin/cloudflared
 RUN         pipx install apprise
 
 ## Setup user and working directory
-RUN         adduser -D -h /home/container container -s /bin/bash container
+RUN         (deluser node 2>/dev/null; true) && adduser -u 1000 -D -h /home/container container
 USER        container
 ENV         USER=container HOME=/home/container
 WORKDIR     /home/container

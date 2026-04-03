@@ -4,7 +4,7 @@ LABEL       author="Michael Parker" maintainer="parker@pterodactyl.io"
 
 RUN         apt update \
             && apt -y install git gcc g++ ca-certificates dnsutils curl iproute2 ffmpeg procps tini \
-            && useradd -m -d /home/container container
+            && (userdel node 2>/dev/null; userdel mongodb 2>/dev/null; userdel redis 2>/dev/null; true) && useradd -u 1000 -m -d /home/container -s /bin/bash container
 
 USER        container
 ENV         USER=container HOME=/home/container

@@ -12,7 +12,7 @@ RUN apt update && apt install --no-install-recommends -y curl apt-transport-http
  ## install bastion reqs
  && apt install -y python3 build-essential git libtool netcat ffmpeg iproute2 tzdata tini \
  ## add container user
- && useradd -d /home/container -m container -s /bin/bash
+ && (userdel node 2>/dev/null; userdel mongodb 2>/dev/null; userdel redis 2>/dev/null; true) && useradd -u 1000 -d /home/container -m container -s /bin/bash
 
 USER        container
 ENV         USER=container HOME=/home/container
