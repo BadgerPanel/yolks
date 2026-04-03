@@ -3,7 +3,7 @@ FROM        --platform=$TARGETOS/$TARGETARCH node:14-bullseye-slim
 LABEL       author="Michael Parker" maintainer="parker@pterodactyl.io"
 
 # add container user and set stop signal
-RUN         (userdel node 2>/dev/null; userdel mongodb 2>/dev/null; userdel redis 2>/dev/null; true) && useradd -u 1000 -m -d /home/container -s /bin/bash container
+RUN         (existing=$(getent passwd 1000 | cut -d: -f1) && [ -n "$existing" ] && userdel -r "$existing"; true) && useradd -u 1000 -m -d /home/container -s /bin/bash container
 STOPSIGNAL  SIGINT
 
 RUN         apt update \
