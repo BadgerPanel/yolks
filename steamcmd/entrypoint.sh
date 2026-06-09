@@ -65,6 +65,23 @@ if [ -z ${AUTO_UPDATE} ] || [ "${AUTO_UPDATE}" == "1" ]; then
             STEAM_PASS=""
             STEAM_AUTH=""
         fi
+        # SRCDS_X64 -> -beta x86-64 derivation. The gmod (and other
+        # Source) eggs let operators toggle 64-bit binaries via the
+        # SRCDS_X64 env var; the corresponding steamcmd branch is
+        # 'x86-64'. The install script (run on first install /
+        # reinstall) already derives this, but the per-start update
+        # below did NOT - so toggling SRCDS_X64 from the panel
+        # without a reinstall left srcds_linux_x64 missing forever
+        # and the server crashed at boot with
+        #   ERROR: Source Engine binary 'srcds_linux_x64' not found
+        # Now: if SRCDS_X64=1 and the operator hasn't explicitly
+        # pinned a different SRCDS_BETAID, default it to x86-64 for
+        # the duration of this steamcmd run. Explicit SRCDS_BETAID
+        # still wins (lets advanced users pick prerelease / dev / ...).
+        if [ "${SRCDS_X64}" == "1" ] && [ -z "${SRCDS_BETAID}" ]; then
+            echo -e "[entrypoint] SRCDS_X64=1 detected, using -beta x86-64 for steamcmd update"
+            SRCDS_BETAID="x86-64"
+        fi
         # Run SteamCMD
         ./steamcmd/steamcmd.sh +force_install_dir /home/container +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} $( [[ "${WINDOWS_INSTALL}" == "1" ]] && printf %s '+@sSteamCmdForcePlatformType windows' ) +app_update 1007 +app_update ${SRCDS_APPID} $( [[ -z ${SRCDS_BETAID} ]] || printf %s "-beta ${SRCDS_BETAID}" ) $( [[ -z ${SRCDS_BETAPASS} ]] || printf %s "-betapassword ${SRCDS_BETAPASS}" ) $( [[ -z ${HLDS_GAME} ]] || printf %s "+app_set_config 90 mod ${HLDS_GAME}" ) ${INSTALL_FLAGS} $( [[ "${VALIDATE}" == "1" ]] && printf %s 'validate' ) +quit
     else
@@ -72,6 +89,24 @@ if [ -z ${AUTO_UPDATE} ] || [ "${AUTO_UPDATE}" == "1" ]; then
     fi
 else
     echo -e "Skipping game server update check; Auto Update is set to 0."
+fi
+
+# Defensive guard: if SRCDS_X64=1 but srcds_linux_x64 still isn't
+# on disk after the update (steamcmd failed silently, network blip,
+# AUTO_UPDATE=0 etc.), fetch JUST the x86-64 branch one more time
+# instead of letting srcds_run crash on the missing binary. Cheap
+# - steamcmd's resume support means a successful prior pull is a
+# no-op here. Without this guard the user sees the cryptic
+# 'Source Engine binary srcds_linux_x64 not found, exiting' and
+# the server hard-fails on boot.
+if [ "${SRCDS_X64}" == "1" ] && [ ! -z ${SRCDS_APPID} ] && [ ! -f /home/container/srcds_linux_x64 ]; then
+    echo -e "[entrypoint] SRCDS_X64=1 but srcds_linux_x64 missing - fetching x86-64 branch..."
+    ./steamcmd/steamcmd.sh +force_install_dir /home/container +login anonymous +app_update ${SRCDS_APPID} -beta x86-64 validate +quit || true
+    if [ ! -f /home/container/srcds_linux_x64 ]; then
+        echo -e "[entrypoint] WARNING: srcds_linux_x64 still missing after fetch - the server will fail to start. Check steamcmd output above for branch-access errors."
+    else
+        echo -e "[entrypoint] srcds_linux_x64 now present, continuing."
+    fi
 fi
 
 # Replace Startup Variables
