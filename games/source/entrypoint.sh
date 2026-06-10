@@ -140,15 +140,28 @@ if [ "${SRCDS_X64}" == "1" ] && [ ! -z "${SRCDS_APPID}" ] && ! has_x64_binary; t
         echo -e "[entrypoint] ============================================================"
         echo -e "[entrypoint] FATAL: 64-bit binary still missing after recovery."
         echo -e "[entrypoint] steamcmd exit code: ${STEAMCMD_RC}"
-        echo -e "[entrypoint] Looked at BOTH possible paths:"
+        echo -e "[entrypoint] Looked at:"
         echo -e "[entrypoint]   - /home/container/srcds_linux_x64"
         echo -e "[entrypoint]   - /home/container/bin/linux64/srcds_linux"
-        echo -e "[entrypoint] Possible causes:"
-        echo -e "[entrypoint]   1. Stale install files block the redownload. The x86-64 branch"
-        echo -e "[entrypoint]      may be deprecated for AppID ${SRCDS_APPID} and steamcmd is"
-        echo -e "[entrypoint]      keeping the old layout. Click Reinstall (wipes + redownloads)."
-        echo -e "[entrypoint]   2. steamcmd network/auth failure (check log above)"
-        echo -e "[entrypoint]   3. Anonymous user lacks branch access (set STEAM_USER+auth)"
+        echo -e "[entrypoint] ---"
+        echo -e "[entrypoint] Self-diagnostic: srcds-like binaries found on disk:"
+        # Cap at 30 results so a runaway find on a misconfigured
+        # data dir can't flood the console. Limit depth to 5 so
+        # we don't traverse into massive workshop dirs.
+        FOUND_BINARIES=$(find /home/container -maxdepth 5 -type f \( -name "srcds*" -o -name "*srcds_*" \) 2>/dev/null | head -30)
+        if [ -z "${FOUND_BINARIES}" ]; then
+            echo -e "[entrypoint]   (none - steamcmd may have failed silently)"
+        else
+            echo "${FOUND_BINARIES}" | while read -r f; do
+                echo -e "[entrypoint]   ${f}"
+            done
+        fi
+        echo -e "[entrypoint] ---"
+        echo -e "[entrypoint] If you see a binary above that looks like the right server"
+        echo -e "[entrypoint] executable but at an unexpected path, please report this in"
+        echo -e "[entrypoint] a ticket - the entrypoint check needs updating to recognise"
+        echo -e "[entrypoint] the new layout."
+        echo -e "[entrypoint] ---"
         echo -e "[entrypoint] Recovery:"
         echo -e "[entrypoint]   - Click Reinstall on the server's Settings tab. This WIPES the"
         echo -e "[entrypoint]     server volume (addons, configs, lua, workshop downloads, all"
