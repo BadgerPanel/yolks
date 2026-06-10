@@ -87,31 +87,39 @@ else
 fi
 
 # Defensive guard: SRCDS_X64=1 but the 64-bit binary is missing.
-# Two possible binary paths depending on game / SDK version:
-#   - /home/container/srcds_linux_x64        (older Source SDK)
-#   - /home/container/bin/linux64/srcds_linux (newer GMod / Source 2013+)
-# We accept EITHER. srcds_run picks the binary via -binary <name>;
+# Three possible binary paths depending on game / SDK version /
+# steamcmd update timing:
+#   - /home/container/srcds_linux_x64         (legacy Source SDK)
+#   - /home/container/bin/linux64/srcds_linux (intermediate naming)
+#   - /home/container/bin/linux64/srcds       (modern GMod 2026+,
+#                                              srcds_run_x64 launcher)
+# We accept ANY. srcds_run picks the binary via -binary <name>;
 # whichever path the operator's startup command points at is fine
 # as long as one of them exists on disk.
 #
-# Common trap: the x86-64 beta branch is deprecated for newer
-# Source titles (notably GMod). The 64-bit files now live on the
-# DEFAULT branch under bin/linux64/. Recovery tries the legacy
-# '-beta x86-64' first for backward compat, then accepts either
-# path before deciding success/failure.
+# Diagnostic from QA on 2026-06-10: AppID 4020 on x86-64 beta now
+# ships the launcher at ./srcds_run_x64 and the binary at
+# ./bin/linux64/srcds (plain 'srcds', no _linux suffix). Earlier
+# versions had srcds_linux there. Both are accepted now.
 has_x64_binary() {
     [ -f /home/container/srcds_linux_x64 ] || \
-    [ -f /home/container/bin/linux64/srcds_linux ]
+    [ -f /home/container/bin/linux64/srcds_linux ] || \
+    [ -f /home/container/bin/linux64/srcds ]
 }
 
-# Always-on bridge between the two binary layouts. If steamcmd
-# wrote the binary to bin/linux64/srcds_linux (newer layout) but
-# the operator's startup command still uses '-binary srcds_linux_x64'
-# (legacy egg field), create the symlink so srcds_run finds it
-# without the operator having to edit the Startup tab. Idempotent
-# (ln -sf re-points if needed, no-op when the link already matches).
-if [ -f /home/container/bin/linux64/srcds_linux ] && [ ! -f /home/container/srcds_linux_x64 ]; then
-    ln -sf bin/linux64/srcds_linux /home/container/srcds_linux_x64
+# Always-on bridge to the legacy ./srcds_linux_x64 path. Existing
+# eggs and startup commands reference '-binary srcds_linux_x64'.
+# When steamcmd writes the binary at the newer paths instead,
+# symlink so srcds_run's -binary flag resolves. Idempotent: ln -sf
+# re-points if needed, no-op when the link already matches.
+# Order matters: prefer the newest layout (bin/linux64/srcds) so
+# fresh installs are correctly bridged.
+if [ ! -f /home/container/srcds_linux_x64 ]; then
+    if [ -f /home/container/bin/linux64/srcds ]; then
+        ln -sf bin/linux64/srcds /home/container/srcds_linux_x64
+    elif [ -f /home/container/bin/linux64/srcds_linux ]; then
+        ln -sf bin/linux64/srcds_linux /home/container/srcds_linux_x64
+    fi
 fi
 
 if [ "${SRCDS_X64}" == "1" ] && [ ! -z "${SRCDS_APPID}" ] && ! has_x64_binary; then
