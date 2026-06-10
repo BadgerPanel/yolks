@@ -94,18 +94,34 @@ fi
 # Defensive guard: if SRCDS_X64=1 but srcds_linux_x64 still isn't
 # on disk after the update (steamcmd failed silently, network blip,
 # AUTO_UPDATE=0 etc.), fetch JUST the x86-64 branch one more time
-# instead of letting srcds_run crash on the missing binary. Cheap
-# - steamcmd's resume support means a successful prior pull is a
-# no-op here. Without this guard the user sees the cryptic
-# 'Source Engine binary srcds_linux_x64 not found, exiting' and
-# the server hard-fails on boot.
+# instead of letting srcds_run crash on the missing binary.
+#
+# Validate flag forces steamcmd to re-fetch any files whose
+# content hash doesn't match the manifest - critical when the
+# install was originally done on the 32-bit branch and we're now
+# switching to 64-bit (the per-file hashes differ).
+#
+# We capture steamcmd's exit code and emit explicit
+# ENTRYPOINT_FETCH_X64_OK / ENTRYPOINT_FETCH_X64_FAIL markers so
+# the panel's console parser (and the operator) can tell at a
+# glance whether the recovery worked. Without these markers the
+# previous silent fallthrough left the operator guessing why the
+# server still failed to start.
 if [ "${SRCDS_X64}" == "1" ] && [ ! -z ${SRCDS_APPID} ] && [ ! -f /home/container/srcds_linux_x64 ]; then
-    echo -e "[entrypoint] SRCDS_X64=1 but srcds_linux_x64 missing - fetching x86-64 branch..."
-    ./steamcmd/steamcmd.sh +force_install_dir /home/container +login anonymous +app_update ${SRCDS_APPID} -beta x86-64 validate +quit || true
-    if [ ! -f /home/container/srcds_linux_x64 ]; then
-        echo -e "[entrypoint] WARNING: srcds_linux_x64 still missing after fetch - the server will fail to start. Check steamcmd output above for branch-access errors."
-    else
+    echo -e "[entrypoint] SRCDS_X64=1 but srcds_linux_x64 missing - fetching x86-64 branch (validate)..."
+    set +e
+    ./steamcmd/steamcmd.sh +force_install_dir /home/container +login anonymous +app_update ${SRCDS_APPID} -beta x86-64 validate +quit
+    STEAMCMD_X64_RC=$?
+    set -e
+    echo -e "[entrypoint] steamcmd x86-64 fetch exited rc=${STEAMCMD_X64_RC}"
+    if [ -f /home/container/srcds_linux_x64 ]; then
+        echo -e "ENTRYPOINT_FETCH_X64_OK"
         echo -e "[entrypoint] srcds_linux_x64 now present, continuing."
+    else
+        echo -e "ENTRYPOINT_FETCH_X64_FAIL"
+        echo -e "[entrypoint] srcds_linux_x64 STILL missing after recovery fetch (rc=${STEAMCMD_X64_RC})."
+        echo -e "[entrypoint] Likely cause: x86-64 branch unavailable for this AppID, steamcmd network failure, or anonymous user lacks branch access."
+        echo -e "[entrypoint] To recover: click Reinstall on the server's Settings tab (preserves your addons/configs)."
     fi
 fi
 
