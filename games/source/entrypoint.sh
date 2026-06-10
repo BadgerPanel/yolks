@@ -86,41 +86,61 @@ else
     echo -e "Not updating game server as auto update was set to 0. Starting Server"
 fi
 
-# Defensive guard: SRCDS_X64=1 but srcds_linux_x64 still missing
-# after the update above. Happens when AUTO_UPDATE=0, network
-# blip during steamcmd, or the toggle 0->1 didn't trigger a full
-# fresh fetch.
+# Defensive guard: SRCDS_X64=1 but the 64-bit binary is missing.
+# Two possible binary paths depending on game / SDK version:
+#   - /home/container/srcds_linux_x64        (older Source SDK)
+#   - /home/container/bin/linux64/srcds_linux (newer GMod / Source 2013+)
+# We accept EITHER. srcds_run picks the binary via -binary <name>;
+# whichever path the operator's startup command points at is fine
+# as long as one of them exists on disk.
 #
-# Retries once with explicit '-beta x86-64 validate' then HARD-FAILS
-# with a clear message if still missing. Previous versions of
-# this entrypoint silently fell through to srcds_run which then
-# crashed with the cryptic 'Source Engine binary not found' error.
-# Now: the operator sees ENTRYPOINT_FETCH_X64_OK / FAIL markers
-# in the panel console AND the entrypoint exits with a clear
-# remediation message instead of letting srcds_run fail.
-if [ "${SRCDS_X64}" == "1" ] && [ ! -z "${SRCDS_APPID}" ] && [ ! -f /home/container/srcds_linux_x64 ]; then
-    echo -e "[entrypoint] SRCDS_X64=1 but srcds_linux_x64 missing - running recovery fetch..."
+# Common trap: the x86-64 beta branch is deprecated for newer
+# Source titles (notably GMod). The 64-bit files now live on the
+# DEFAULT branch under bin/linux64/. Recovery tries the legacy
+# '-beta x86-64' first for backward compat, then accepts either
+# path before deciding success/failure.
+has_x64_binary() {
+    [ -f /home/container/srcds_linux_x64 ] || \
+    [ -f /home/container/bin/linux64/srcds_linux ]
+}
+
+if [ "${SRCDS_X64}" == "1" ] && [ ! -z "${SRCDS_APPID}" ] && ! has_x64_binary; then
+    echo -e "[entrypoint] SRCDS_X64=1 but no 64-bit binary on disk - running recovery fetch..."
+    echo -e "[entrypoint] (checked srcds_linux_x64 and bin/linux64/srcds_linux)"
     set +e
     ./steamcmd/steamcmd.sh +force_install_dir /home/container +login anonymous +app_update ${SRCDS_APPID} -beta x86-64 validate +quit
     STEAMCMD_RC=$?
     set -e
     echo -e "[entrypoint] recovery steamcmd exited rc=${STEAMCMD_RC}"
-    if [ -f /home/container/srcds_linux_x64 ]; then
+    if has_x64_binary; then
         echo -e "ENTRYPOINT_FETCH_X64_OK"
-        echo -e "[entrypoint] srcds_linux_x64 now present, continuing to srcds_run."
+        if [ -f /home/container/bin/linux64/srcds_linux ] && [ ! -f /home/container/srcds_linux_x64 ]; then
+            echo -e "[entrypoint] 64-bit binary lives at bin/linux64/srcds_linux (newer Source layout)."
+            echo -e "[entrypoint] If your startup uses '-binary srcds_linux_x64', change it to"
+            echo -e "[entrypoint] '-binary bin/linux64/srcds_linux' in the panel Startup tab."
+        fi
     else
         echo -e "ENTRYPOINT_FETCH_X64_FAIL"
         echo -e "[entrypoint] ============================================================"
-        echo -e "[entrypoint] FATAL: srcds_linux_x64 still missing after recovery."
+        echo -e "[entrypoint] FATAL: 64-bit binary still missing after recovery."
         echo -e "[entrypoint] steamcmd exit code: ${STEAMCMD_RC}"
+        echo -e "[entrypoint] Looked at BOTH possible paths:"
+        echo -e "[entrypoint]   - /home/container/srcds_linux_x64"
+        echo -e "[entrypoint]   - /home/container/bin/linux64/srcds_linux"
         echo -e "[entrypoint] Possible causes:"
-        echo -e "[entrypoint]   1. The x86-64 branch is unavailable for AppID ${SRCDS_APPID}"
+        echo -e "[entrypoint]   1. Stale install files block the redownload. The x86-64 branch"
+        echo -e "[entrypoint]      may be deprecated for AppID ${SRCDS_APPID} and steamcmd is"
+        echo -e "[entrypoint]      keeping the old layout. Click Reinstall (wipes + redownloads)."
         echo -e "[entrypoint]   2. steamcmd network/auth failure (check log above)"
-        echo -e "[entrypoint]   3. Anonymous user lacks branch access (use STEAM_USER + auth)"
+        echo -e "[entrypoint]   3. Anonymous user lacks branch access (set STEAM_USER+auth)"
         echo -e "[entrypoint] Recovery:"
-        echo -e "[entrypoint]   - Click Reinstall on the server's Settings tab (non-destructive"
-        echo -e "[entrypoint]     since v0.2.71 - preserves your addons, configs, lua)."
-        echo -e "[entrypoint]   - OR set SRCDS_X64=0 to fall back to the 32-bit binary."
+        echo -e "[entrypoint]   - Click Reinstall on the server's Settings tab. This WIPES the"
+        echo -e "[entrypoint]     server volume (addons, configs, lua, workshop downloads, all"
+        echo -e "[entrypoint]     server files), re-pulls the latest yolk image, and re-runs"
+        echo -e "[entrypoint]     the egg install. Back up via SFTP first if you need to keep"
+        echo -e "[entrypoint]     anything from this server's data directory."
+        echo -e "[entrypoint]   - OR set SRCDS_X64=0 in the Startup tab to fall back to the"
+        echo -e "[entrypoint]     32-bit binary (no reinstall needed)."
         echo -e "[entrypoint] ============================================================"
         # Exit instead of letting srcds_run fail with a cryptic
         # error. Status 78 = 'configuration error' per sysexits.
