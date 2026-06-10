@@ -104,6 +104,16 @@ has_x64_binary() {
     [ -f /home/container/bin/linux64/srcds_linux ]
 }
 
+# Always-on bridge between the two binary layouts. If steamcmd
+# wrote the binary to bin/linux64/srcds_linux (newer layout) but
+# the operator's startup command still uses '-binary srcds_linux_x64'
+# (legacy egg field), create the symlink so srcds_run finds it
+# without the operator having to edit the Startup tab. Idempotent
+# (ln -sf re-points if needed, no-op when the link already matches).
+if [ -f /home/container/bin/linux64/srcds_linux ] && [ ! -f /home/container/srcds_linux_x64 ]; then
+    ln -sf bin/linux64/srcds_linux /home/container/srcds_linux_x64
+fi
+
 if [ "${SRCDS_X64}" == "1" ] && [ ! -z "${SRCDS_APPID}" ] && ! has_x64_binary; then
     echo -e "[entrypoint] SRCDS_X64=1 but no 64-bit binary on disk - running recovery fetch..."
     echo -e "[entrypoint] (checked srcds_linux_x64 and bin/linux64/srcds_linux)"
@@ -114,10 +124,16 @@ if [ "${SRCDS_X64}" == "1" ] && [ ! -z "${SRCDS_APPID}" ] && ! has_x64_binary; t
     echo -e "[entrypoint] recovery steamcmd exited rc=${STEAMCMD_RC}"
     if has_x64_binary; then
         echo -e "ENTRYPOINT_FETCH_X64_OK"
+        # Auto-bridge legacy and new binary paths. The newer Source
+        # layout puts the 64-bit binary at bin/linux64/srcds_linux,
+        # but existing eggs/startup commands still reference the
+        # legacy ./srcds_linux_x64 path. Symlink so srcds_run -binary
+        # srcds_linux_x64 finds the binary regardless of which path
+        # steamcmd actually wrote. ln -sf is idempotent on re-run.
         if [ -f /home/container/bin/linux64/srcds_linux ] && [ ! -f /home/container/srcds_linux_x64 ]; then
             echo -e "[entrypoint] 64-bit binary lives at bin/linux64/srcds_linux (newer Source layout)."
-            echo -e "[entrypoint] If your startup uses '-binary srcds_linux_x64', change it to"
-            echo -e "[entrypoint] '-binary bin/linux64/srcds_linux' in the panel Startup tab."
+            echo -e "[entrypoint] Creating symlink: srcds_linux_x64 -> bin/linux64/srcds_linux"
+            ln -sf bin/linux64/srcds_linux /home/container/srcds_linux_x64
         fi
     else
         echo -e "ENTRYPOINT_FETCH_X64_FAIL"
