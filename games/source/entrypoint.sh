@@ -87,38 +87,63 @@ else
 fi
 
 # Defensive guard: SRCDS_X64=1 but the 64-bit binary is missing.
-# Three possible binary paths depending on game / SDK version /
-# steamcmd update timing:
-#   - /home/container/srcds_linux_x64         (legacy Source SDK)
-#   - /home/container/bin/linux64/srcds_linux (intermediate naming)
-#   - /home/container/bin/linux64/srcds       (modern GMod 2026+,
-#                                              srcds_run_x64 launcher)
-# We accept ANY. srcds_run picks the binary via -binary <name>;
-# whichever path the operator's startup command points at is fine
-# as long as one of them exists on disk.
 #
-# Diagnostic from QA on 2026-06-10: AppID 4020 on x86-64 beta now
-# ships the launcher at ./srcds_run_x64 and the binary at
-# ./bin/linux64/srcds (plain 'srcds', no _linux suffix). Earlier
-# versions had srcds_linux there. Both are accepted now.
-has_x64_binary() {
-    [ -f /home/container/srcds_linux_x64 ] || \
-    [ -f /home/container/bin/linux64/srcds_linux ] || \
-    [ -f /home/container/bin/linux64/srcds ]
+# Rather than hardcode the binary path (Steam has already moved
+# it three times: srcds_linux_x64 -> bin/linux64/srcds_linux ->
+# bin/linux64/srcds), scan likely 64-bit-ish locations for any
+# srcds-flavoured binary and use the first match. This survives
+# future Steam renames without an entrypoint update.
+#
+# Scan is silent on success - we only print when we find nothing.
+# Returns the absolute path of the first match on stdout, or
+# empty when nothing found.
+find_x64_srcds_binary() {
+    # Curated fast-path: known historical layouts, fastest check
+    # because no fork. Ordered most-recent first (newer installs
+    # win on a system with leftover files from an older layout).
+    local known=(
+        /home/container/bin/linux64/srcds
+        /home/container/bin/linux64/srcds_linux
+        /home/container/srcds_linux_x64
+        /home/container/bin/srcds_linux_x64
+    )
+    local p
+    for p in "${known[@]}"; do
+        [ -f "$p" ] && { echo "$p"; return 0; }
+    done
+    # Generic fallback: scan likely 64-bit subdirectories for any
+    # executable that looks like a server binary. maxdepth keeps
+    # the scan O(few) - won't traverse into massive game / addon
+    # trees. Pattern matches common variants (srcds*, *_linux_x64,
+    # srcds_x64, etc.).
+    local found
+    found=$(find /home/container/bin/linux64 \
+                 /home/container/bin/x64 \
+                 /home/container/bin64 \
+                 /home/container/x64 \
+                 -maxdepth 2 -type f -executable \
+                 \( -name "srcds*" -o -name "*_x64" -o -name "*64" \) \
+                 2>/dev/null | head -1)
+    [ -n "$found" ] && { echo "$found"; return 0; }
+    return 1
 }
 
-# Always-on bridge to the legacy ./srcds_linux_x64 path. Existing
-# eggs and startup commands reference '-binary srcds_linux_x64'.
-# When steamcmd writes the binary at the newer paths instead,
-# symlink so srcds_run's -binary flag resolves. Idempotent: ln -sf
-# re-points if needed, no-op when the link already matches.
-# Order matters: prefer the newest layout (bin/linux64/srcds) so
-# fresh installs are correctly bridged.
+has_x64_binary() {
+    [ -n "$(find_x64_srcds_binary)" ]
+}
+
+# Always-on bridge to the legacy ./srcds_linux_x64 path. Eggs and
+# operator startup commands reference '-binary srcds_linux_x64'.
+# When steamcmd writes the binary at a different path, symlink
+# the legacy name to wherever the binary actually lives so the
+# operator's startup command keeps working. Silent and idempotent.
 if [ ! -f /home/container/srcds_linux_x64 ]; then
-    if [ -f /home/container/bin/linux64/srcds ]; then
-        ln -sf bin/linux64/srcds /home/container/srcds_linux_x64
-    elif [ -f /home/container/bin/linux64/srcds_linux ]; then
-        ln -sf bin/linux64/srcds_linux /home/container/srcds_linux_x64
+    _x64_actual=$(find_x64_srcds_binary)
+    if [ -n "$_x64_actual" ]; then
+        # Relative target so the symlink survives the data dir
+        # being moved (host_path differences across nodes).
+        _x64_rel="${_x64_actual#/home/container/}"
+        ln -sf "$_x64_rel" /home/container/srcds_linux_x64
     fi
 fi
 
