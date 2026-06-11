@@ -84,6 +84,13 @@ ENV         LC_ALL=en_US.UTF-8
 
 # Setup user and working directory
 RUN         useradd -m -d /home/container -s /bin/bash container
+
+# Source engine looks for /sourceengine and /platform at root.
+# Symlink them to the bind-mounted data dir so resource/gameevents.res
+# and friends resolve.
+RUN         ln -s /home/container/sourceengine /sourceengine \
+         && ln -s /home/container/platform /platform
+
 USER        container
 ENV         USER=container HOME=/home/container
 WORKDIR     /home/container
