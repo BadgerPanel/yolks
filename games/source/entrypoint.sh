@@ -157,7 +157,8 @@ if [ "${SRCDS_X64}" == "1" ]; then
 
     # Engine looks for game .so files at garrysmod/bin/ but on 64-bit
     # they live at bin/linux64/. Symlink the ones it needs.
-    if [ -d /home/container/garrysmod/bin ]; then
+    if [ -d /home/container/garrysmod ]; then
+        mkdir -p /home/container/garrysmod/bin
         for so in lua_shared.so server.so; do
             if [ -f "/home/container/bin/linux64/$so" ] && [ ! -e "/home/container/garrysmod/bin/$so" ]; then
                 ln -sf "../../bin/linux64/$so" "/home/container/garrysmod/bin/$so"
