@@ -147,6 +147,15 @@ if [ ! -f /home/container/srcds_linux_x64 ]; then
     fi
 fi
 
+# srcds_run (32-bit launcher) only sets LD_LIBRARY_PATH for 32-bit.
+# When invoked via './srcds_run -binary srcds_linux_x64' the 64-bit
+# binary fails to dlopen libtier0.so because bin/linux64 isn't in
+# LD_LIBRARY_PATH. Export it here so srcds_run inherits + the
+# binary finds its sibling .so files.
+if [ "${SRCDS_X64}" == "1" ]; then
+    export LD_LIBRARY_PATH="/home/container/bin/linux64:/home/container/bin:${LD_LIBRARY_PATH:-}"
+fi
+
 if [ "${SRCDS_X64}" == "1" ] && [ ! -z "${SRCDS_APPID}" ] && ! has_x64_binary; then
     echo -e "[entrypoint] SRCDS_X64=1 but no 64-bit binary on disk - running recovery fetch..."
     echo -e "[entrypoint] (checked srcds_linux_x64 and bin/linux64/srcds_linux)"
