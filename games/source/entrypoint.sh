@@ -236,6 +236,18 @@ fi
 
 # Replace Startup Variables
 MODIFIED_STARTUP=$(echo ${STARTUP} | sed -e 's/{{/${/g' -e 's/}}/}/g')
+
+# Modern 64-bit GMod (and other Source games) ships srcds_run_x64
+# as the proper launcher. The legacy '-binary srcds_linux_x64'
+# trick doesn't set up search paths for server.so / lua_shared.so
+# correctly. If the launcher exists and SRCDS_X64=1, swap the
+# command + drop the -binary flag.
+if [ "${SRCDS_X64}" == "1" ] && [ -f /home/container/srcds_run_x64 ]; then
+    MODIFIED_STARTUP=$(echo "${MODIFIED_STARTUP}" \
+        | sed -e 's|\./srcds_run\b|./srcds_run_x64|' \
+              -e "s| -binary srcds_linux_x64||")
+fi
+
 echo -e ":/home/container$ ${MODIFIED_STARTUP}"
 
 # Run the Server
