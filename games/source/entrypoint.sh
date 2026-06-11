@@ -249,10 +249,17 @@ fi
 MODIFIED_STARTUP=$(echo ${STARTUP} | sed -e 's/{{/${/g' -e 's/}}/}/g')
 
 # Prefer srcds_run_x64 - it sets up the right search paths.
+# Also force -basedir so the engine's BASE_PATH isn't empty
+# (otherwise sourceengine/ + platform/ paths resolve absolute and
+# resource/gameevents.res fails to load).
 if [ "${SRCDS_X64}" == "1" ] && [ -f /home/container/srcds_run_x64 ]; then
     MODIFIED_STARTUP=$(echo "${MODIFIED_STARTUP}" \
         | sed -e 's|\./srcds_run\b|./srcds_run_x64|' \
               -e "s| -binary srcds_linux_x64||")
+    case "${MODIFIED_STARTUP}" in
+        *"-basedir"*) ;;
+        *) MODIFIED_STARTUP="${MODIFIED_STARTUP} -basedir /home/container" ;;
+    esac
 fi
 
 echo -e ":/home/container$ ${MODIFIED_STARTUP}"
