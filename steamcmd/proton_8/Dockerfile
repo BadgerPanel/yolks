@@ -1,5 +1,6 @@
 # ---------------------------------------------
 # Steam Proton image
+# Also published as yolks:proton_8 (compat alias for eggs that reference it).
 # ---------------------------------------------
 FROM        debian:bookworm-slim
 
