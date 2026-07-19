@@ -47,4 +47,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.lower-repo.outputs.repository }}/steamcmd:${{ matrix.distro }}
-            ${{ (matrix.distro == 'proton' || matrix.distro == 'proton_8') && format('ghcr.io/{0}/yolks:{1}', steps.lower-repo.outputs.repository, matrix.distro) || '' }}
+            ${{ (matrix.distro == 'proton' || matrix.distro == 'proton_8' || matrix.distro == 'sniper') && format('ghcr.io/{0}/yolks:{1}', steps.lower-repo.outputs.repository, matrix.distro) || '' }}

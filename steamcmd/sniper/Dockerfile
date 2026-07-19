@@ -6,6 +6,13 @@ FROM         --platform=$TARGETOS/$TARGETARCH registry.gitlab.steamos.cloud/stea
 LABEL       author="Alexander Ballauf" maintainer="admin@ballaual.de"
 LABEL       org.opencontainers.image.description SteamRT3 Platform image for Pterodactyl Source engine servers. 
 
+# Valve's steamrt apt repo intermittently times out part-way through a download,
+# which failed this build with "Unable to fetch some archives" (apt exit 100)
+# after it had already pulled ~76MB. Retry and extend the timeout so one slow
+# package doesn't kill the whole image build.
+RUN         printf 'Acquire::Retries "5";\nAcquire::http::Timeout "60";\nAcquire::https::Timeout "60";\n' \
+                > /etc/apt/apt.conf.d/99-badger-retries
+
 # Install required packages
 RUN         dpkg --add-architecture i386 \
             && apt-get update \
