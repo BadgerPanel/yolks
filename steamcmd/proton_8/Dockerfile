@@ -43,7 +43,9 @@ RUN         apt install -y \
                 pipx
 
 # Download Proton GE
-RUN         curl -sLOJ "$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/tags/GE-Proton8-32 | grep browser_download_url | cut -d\" -f4 | egrep .tar.gz)"
+# Pinned release, fetched directly rather than via the rate-limited GitHub API
+# (the API call is what intermittently breaks the sibling proton image).
+RUN         curl -fsSLO https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton8-32/GE-Proton8-32.tar.gz
 RUN         tar -xzf GE-Proton*.tar.gz -C /usr/local/bin/ --strip-components=1
 RUN         rm GE-Proton*.*
 

@@ -42,8 +42,18 @@ RUN         apt install -y \
                 file \
                 pipx
 
-# Download Proton GE
-RUN         curl -sLOJ "$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | grep browser_download_url | cut -d\" -f4 | egrep .tar.gz)"
+# Download Proton GE.
+# Resolve the latest tag from the releases/latest redirect instead of the GitHub
+# API: the API is rate-limited on shared Actions runners, and when throttled the
+# old one-liner resolved to an empty URL and failed the build with curl exit 3
+# ("URL malformed"), which is why this image stopped publishing. The redirect is
+# not rate-limited, and -f makes any failure loud instead of writing an error
+# page to disk.
+RUN         set -eux; \
+            TAG="$(curl -fsSI https://github.com/GloriousEggroll/proton-ge-custom/releases/latest \
+                   | tr -d '\r' | awk 'tolower($1)=="location:"{print $2}' | sed -E 's#.*/tag/##')"; \
+            test -n "$TAG"; \
+            curl -fsSLO "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${TAG}/${TAG}.tar.gz"
 RUN         tar -xzf GE-Proton*.tar.gz -C /usr/local/bin/ --strip-components=1
 RUN         rm GE-Proton*.*
 
