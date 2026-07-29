@@ -10,7 +10,19 @@ FROM        debian:trixie-slim
 
 LABEL       author="Torsten Widmann" maintainer="info@goover.de"
 
-# Install required packages
+# Install required packages.
+#
+# libwine is here for its dependencies, not for Debian's wine: GE-Proton ships its
+# own wine binaries but none of the shared libraries they need. Without them the X11
+# driver cannot load, so anything that opens a window fails. That is what stopped the
+# Visual C++ redistributable installing, which reported it as:
+#
+#   Wine cannot find the FreeType font library.
+#   err:winediag:nodrv_CreateWindow ... no driver could be loaded.
+#
+# libwine pulls libfreetype6, libfontconfig1, libx11-6 and libxext6 for both
+# architectures. gnutls is listed separately because wine looks for it by soname and
+# the log named it directly.
 RUN         dpkg --add-architecture i386
 RUN         apt update
 RUN         apt install -y --no-install-recommends \
@@ -25,7 +37,11 @@ RUN         apt install -y --no-install-recommends \
                 libncurses6 \
                 dbus \
                 libgdiplus \
-                lib32gcc-s1
+                lib32gcc-s1 \
+                libwine \
+                libwine:i386 \
+                libgnutls30t64 \
+                libgnutls30t64:i386
 RUN         apt install -y \
                 alsa-tools \
                 libpulse0 \
