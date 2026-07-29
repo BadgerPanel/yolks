@@ -50,6 +50,51 @@ if [ -f "/usr/local/bin/proton" ]; then
         fi
 fi
 
+# Install prefix dependencies for Proton eggs that ask for them.
+#
+# Only the wine image implemented WINETRICKS_RUN, so a Proton egg had no way to get
+# anything into its prefix. Space Engineers needs the Visual C++ runtime and said so
+# plainly before quitting:
+#
+#   Error: Please install latest C++ redistributable package for 2015-2019 x64
+#
+# Opt-in: this does nothing unless an egg sets WINETRICKS_RUN.
+#
+# Proton is asked to build its prefix first. Running winetricks against a prefix
+# that does not exist yet would have it create one, which Proton then upgrades
+# underneath us; letting Proton go first means winetricks only ever adds to a prefix
+# Proton already owns. A marker file keeps this to once per prefix, since it takes a
+# few minutes and downloads from Microsoft.
+if [ -f "/usr/local/bin/proton" ] && [ -n "${WINETRICKS_RUN}" ]; then
+    WINETRICKS_MARKER="${STEAM_COMPAT_DATA_PATH}/.badger-winetricks-done"
+    if [ ! -f "${WINETRICKS_MARKER}" ]; then
+        echo -e "Installing prefix dependencies (${WINETRICKS_RUN}). First start only, this takes a few minutes."
+
+        proton run cmd /c exit >/dev/null 2>&1 || true
+
+        export WINEPREFIX="${STEAM_COMPAT_DATA_PATH}/pfx"
+        export WINE="/usr/local/bin/files/bin/wine"
+        export WINESERVER="/usr/local/bin/files/bin/wineserver"
+
+        for verb in ${WINETRICKS_RUN}; do
+            echo -e "  installing ${verb}..."
+            if xvfb-run -a winetricks -q --force "${verb}" >/dev/null 2>&1; then
+                echo -e "  ${verb} installed"
+            else
+                # Not fatal: better to start and let the game say what it is missing
+                # than to refuse to boot over one verb.
+                echo -e "  ${verb} FAILED to install, continuing anyway"
+            fi
+        done
+
+        "${WINESERVER}" -k >/dev/null 2>&1 || true
+        touch "${WINETRICKS_MARKER}"
+        echo -e "Prefix dependencies done"
+
+        unset WINEPREFIX WINE WINESERVER
+    fi
+fi
+
 # Switch to the container's working directory
 cd /home/container || exit 1
 
