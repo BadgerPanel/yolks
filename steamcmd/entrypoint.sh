@@ -76,6 +76,7 @@ if [ -f "/usr/local/bin/proton" ] && [ -n "${WINETRICKS_RUN}" ]; then
         export WINE="/usr/local/bin/files/bin/wine"
         export WINESERVER="/usr/local/bin/files/bin/wineserver"
 
+        winetricks_failed=""
         for verb in ${WINETRICKS_RUN}; do
             echo -e "  installing ${verb}..."
             verb_log="${STEAM_COMPAT_DATA_PATH}/winetricks-${verb}.log"
@@ -86,6 +87,7 @@ if [ -f "/usr/local/bin/proton" ] && [ -n "${WINETRICKS_RUN}" ]; then
                 # than to refuse to boot over one verb. Print why, though. Discarding
                 # this output meant a verb could fail in two seconds with no clue as
                 # to the reason, which cost a full image rebuild to find out.
+                winetricks_failed="${winetricks_failed} ${verb}"
                 echo -e "  ${verb} FAILED to install, continuing anyway"
                 echo -e "  ----- last 40 lines of winetricks output -----"
                 tail -n 40 "${verb_log}" 2>/dev/null | sed 's/^/  /'
@@ -94,8 +96,14 @@ if [ -f "/usr/local/bin/proton" ] && [ -n "${WINETRICKS_RUN}" ]; then
         done
 
         "${WINESERVER}" -k >/dev/null 2>&1 || true
-        touch "${WINETRICKS_MARKER}"
-        echo -e "Prefix dependencies done"
+
+        if [ -z "${winetricks_failed}" ]; then
+            touch "${WINETRICKS_MARKER}"
+            echo -e "Prefix dependencies done"
+        else
+            echo -e "Prefix dependencies incomplete, failed:${winetricks_failed}"
+            echo -e "These will be retried on the next start."
+        fi
 
         unset WINEPREFIX WINE WINESERVER
     fi
