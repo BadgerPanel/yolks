@@ -78,12 +78,18 @@ if [ -f "/usr/local/bin/proton" ] && [ -n "${WINETRICKS_RUN}" ]; then
 
         for verb in ${WINETRICKS_RUN}; do
             echo -e "  installing ${verb}..."
-            if xvfb-run -a winetricks -q --force "${verb}" >/dev/null 2>&1; then
+            verb_log="${STEAM_COMPAT_DATA_PATH}/winetricks-${verb}.log"
+            if xvfb-run -a winetricks -q --force "${verb}" >"${verb_log}" 2>&1; then
                 echo -e "  ${verb} installed"
             else
                 # Not fatal: better to start and let the game say what it is missing
-                # than to refuse to boot over one verb.
+                # than to refuse to boot over one verb. Print why, though. Discarding
+                # this output meant a verb could fail in two seconds with no clue as
+                # to the reason, which cost a full image rebuild to find out.
                 echo -e "  ${verb} FAILED to install, continuing anyway"
+                echo -e "  ----- last 40 lines of winetricks output -----"
+                tail -n 40 "${verb_log}" 2>/dev/null | sed 's/^/  /'
+                echo -e "  ----- full output: ${verb_log} -----"
             fi
         done
 
