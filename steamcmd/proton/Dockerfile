@@ -1,8 +1,12 @@
 # ---------------------------------------------
 # Steam Proton image
 # Also published as yolks:proton (compat alias for eggs that reference it).
+#
+# Base must stay new enough for the pinned GE-Proton below. GE-Proton11 needs
+# glibc 2.38, and bookworm only has 2.36, so every Proton egg died at startup with
+# "could not load ntdll.so: version GLIBC_2.38 not found". Trixie has 2.41.
 # ---------------------------------------------
-FROM        debian:bookworm-slim
+FROM        debian:trixie-slim
 
 LABEL       author="Torsten Widmann" maintainer="info@goover.de"
 
@@ -13,12 +17,11 @@ RUN         apt install -y --no-install-recommends \
                 wget \
                 iproute2 \
                 gnupg2 \
-                software-properties-common \
                 libntlm0 \
                 winbind \
                 xvfb \
                 xauth \
-                libncurses5-dev:i386 \
+                libncurses-dev:i386 \
                 libncurses6 \
                 dbus \
                 libgdiplus \
@@ -28,7 +31,7 @@ RUN         apt install -y \
                 libpulse0 \
                 pulseaudio \
                 libpulse-dev \
-                libasound2 \
+                libasound2t64 \
                 libao-common \
                 gnutls-bin \
                 gnupg \
@@ -42,20 +45,24 @@ RUN         apt install -y \
                 file \
                 pipx
 
-# Download Proton GE.
-# Resolve the latest tag from the releases/latest redirect instead of the GitHub
-# API: the API is rate-limited on shared Actions runners, and when throttled the
-# old one-liner resolved to an empty URL and failed the build with curl exit 3
-# ("URL malformed"), which is why this image stopped publishing. The redirect is
-# not rate-limited, and -f makes any failure loud instead of writing an error
-# page to disk.
+# Download Proton GE, pinned.
+#
+# This used to resolve whatever "latest" pointed at. GE-Proton11 then raised its
+# glibc floor to 2.38 and every Proton game in the panel stopped starting, with
+# nothing in this repo having changed. A Proton bump can break every Proton egg at
+# once, so it is a deliberate change now, not a side effect of rebuilding.
+#
+# When bumping: check the release runs on the base image's glibc, and update the
+# checksum from the release's own .sha512sum.
+ARG         GE_PROTON_VERSION=GE-Proton11-3
+ARG         GE_PROTON_SHA512=528ae7831f909c0a4fff5d83889ac6dab3c9706746cd148f05f3064ac042763853d68277e2a815f18f16c17285d5d128864a03c563956c0dce30bafcd16aa77c
+
 RUN         set -eux; \
-            TAG="$(curl -fsSI https://github.com/GloriousEggroll/proton-ge-custom/releases/latest \
-                   | tr -d '\r' | awk 'tolower($1)=="location:"{print $2}' | sed -E 's#.*/tag/##')"; \
-            test -n "$TAG"; \
-            curl -fsSLO "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${TAG}/${TAG}.tar.gz"
-RUN         tar -xzf GE-Proton*.tar.gz -C /usr/local/bin/ --strip-components=1
-RUN         rm GE-Proton*.*
+            curl -fsSLO "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${GE_PROTON_VERSION}/${GE_PROTON_VERSION}.tar.gz"; \
+            echo "${GE_PROTON_SHA512}  ${GE_PROTON_VERSION}.tar.gz" | sha512sum -c -; \
+            tar -xzf "${GE_PROTON_VERSION}.tar.gz" -C /usr/local/bin/ --strip-components=1; \
+            rm "${GE_PROTON_VERSION}.tar.gz"; \
+            test -x /usr/local/bin/proton
 
 # Proton Fix machine-id
 RUN         rm -f /etc/machine-id
@@ -66,8 +73,8 @@ RUN         dbus-uuidgen --ensure
 # Setup Protontricks
 RUN         pipx install protontricks
 
-# Set up Winetricks
-RUN	        wget -q -O /usr/sbin/winetricks https://raw.githubusercontent.com/pelican-eggs/winetricks/master/src/winetricks \
+# Set up Winetricks, from the project itself rather than a third party's fork
+RUN	        wget -q -O /usr/sbin/winetricks https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks \
             && chmod +x /usr/sbin/winetricks
 
 # Install rcon
