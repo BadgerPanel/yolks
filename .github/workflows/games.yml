@@ -22,6 +22,8 @@ jobs:
           - altv
           - arma3
           - dayz
+          # amd64 only: the Steam client and libsteam_api.so are x86-64.
+          - fusion
           - hytale
           - mohaa
           - rust
