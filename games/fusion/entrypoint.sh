@@ -29,6 +29,7 @@ jq \
   --argjson minor     "${FUSION_VERSION_MINOR:-14}" \
   --argjson entities  "${MAX_ENTITIES:-2000}" \
   --argjson global    "${GLOBAL_LISTS:-true}" \
+  --argjson extended  "${EXTENDED_PROTECTION:-true}" \
   --argjson antispam  "${ANTISPAM:-true}" \
   --argjson burst     "${SPAWN_BURST_LIMIT:-25}" \
   --argjson perPlayer "${MAX_ENTITIES_PER_PLAYER:-300}" \
@@ -44,6 +45,7 @@ jq \
    | .LevelTitle = $title
    | .MaxEntities = $entities
    | .GlobalListsEnabled = $global
+   | .ExtendedProtection = $extended
    | .AntiSpamEnabled = $antispam
    | .SpawnBurstLimit = $burst
    | .MaxEntitiesPerPlayer = $perPlayer
