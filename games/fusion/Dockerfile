@@ -11,12 +11,21 @@ ENV         DEBIAN_FRONTEND=noninteractive
 RUN         printf 'Acquire::Retries "5";\nAcquire::http::Timeout "60";\n' \
                 > /etc/apt/apt.conf.d/99-badger-retries
 
-# i386 is required: the Steam client bootstrap is still 32-bit.
+# Steam's dependencies live in contrib and non-free.
+RUN         if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+                sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' \
+                    /etc/apt/sources.list.d/debian.sources; \
+            else \
+                sed -i 's/ main$/ main contrib non-free non-free-firmware/' /etc/apt/sources.list; \
+            fi
+
+# i386 is required: the Steam client bootstrap is still 32-bit. xz-utils is what
+# unpacks that bootstrap, and its absence is a silent failure inside steam.sh.
 RUN         dpkg --add-architecture i386 \
             && apt-get update \
             && apt-get install -y --no-install-recommends \
-                ca-certificates curl wget jq tini xvfb \
-                iproute2 net-tools tzdata locales procps \
+                ca-certificates curl wget jq tini xvfb xz-utils \
+                iproute2 net-tools tzdata locales procps file \
                 libgcc-s1 lib32gcc-s1 libc6 libc6:i386 libstdc++6 libstdc++6:i386 \
                 libnss-wrapper gettext-base \
             && apt-get clean \
@@ -29,12 +38,16 @@ RUN         wget -q https://dot.net/v1/dotnet-install.sh -O /tmp/dotnet-install.
             && ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet \
             && rm /tmp/dotnet-install.sh
 
-# Steam's runtime unpacks into the volume on first start, hence the disk requirement.
-RUN         mkdir -p /opt/steam \
-            && curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steam.deb -o /tmp/steam.deb \
-            && dpkg -x /tmp/steam.deb /opt/steam \
+# Installed with apt rather than unpacked with dpkg -x, so Valve's declared
+# dependencies are actually resolved. Steam's runtime then unpacks into the volume
+# on first start, which is what the egg's disk requirement is for.
+RUN         curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steam.deb -o /tmp/steam.deb \
+            && apt-get update \
+            && apt-get install -y --no-install-recommends /tmp/steam.deb \
             && rm /tmp/steam.deb \
-            && ln -s /opt/steam/usr/bin/steam /usr/bin/steam
+            && apt-get clean \
+            && rm -rf /var/lib/apt/lists/* \
+            && command -v steam
 
 ENV         NSS_WRAPPER_PASSWD=/tmp/passwd NSS_WRAPPER_GROUP=/etc/group
 

@@ -46,8 +46,40 @@ if ! pgrep -x steam >/dev/null; then
     exit 1
 fi
 
-echo "Steam is running. Waiting for it to settle..."
-sleep 15
+# On a fresh volume Steam downloads its runtime, which takes minutes rather than
+# seconds. SteamAPI.Init fails against a client that has not finished, so wait for
+# the bootstrap to land instead of guessing at a sleep.
+STEAM_CLIENT="/home/container/.local/share/Steam/ubuntu12_64/steamclient.so"
+
+echo "Waiting for Steam to finish bootstrapping (first run downloads its runtime)..."
+
+for i in $(seq 1 120); do
+    if [ -f "${STEAM_CLIENT}" ] && [ -f /home/container/.steam/steam.pid ]; then
+        echo "Steam is ready."
+        break
+    fi
+
+    if ! pgrep -x steam >/dev/null; then
+        echo "Steam exited while starting up. Last lines of steam.log:"
+        tail -20 /home/container/steam.log 2>/dev/null
+        exit 1
+    fi
+
+    [ $((i % 6)) -eq 0 ] && echo "  still waiting... ($((i * 5))s)"
+    sleep 5
+done
+
+if [ ! -f "${STEAM_CLIENT}" ]; then
+    echo "Steam did not finish bootstrapping in ten minutes. Last lines of steam.log:"
+    tail -30 /home/container/steam.log 2>/dev/null
+    exit 1
+fi
+
+# Steamworks looks for the client library here.
+mkdir -p /home/container/.steam/sdk64
+cp -f "${STEAM_CLIENT}" /home/container/.steam/sdk64/steamclient.so 2>/dev/null || true
+
+sleep 5
 
 # ---- configuration ----
 # Env vars own their own keys; everything else in server.json survives untouched.
