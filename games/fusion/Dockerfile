@@ -1,8 +1,6 @@
 # ---------------------------------------------
 # BONELAB Fusion headless relay
-#
-# Carries Steam and a virtual display, not the game. The relay reimplements the
-# Fusion wire format, so no BONELAB files are ever downloaded.
+# Carries Steam and a virtual display, not the game.
 # ---------------------------------------------
 FROM        --platform=$TARGETOS/$TARGETARCH debian:bookworm-slim
 
@@ -24,15 +22,14 @@ RUN         dpkg --add-architecture i386 \
             && apt-get clean \
             && rm -rf /var/lib/apt/lists/*
 
-# .NET 9 runtime only. The server is published framework-dependent, so no SDK.
+# Runtime only; the server is published framework-dependent.
 RUN         wget -q https://dot.net/v1/dotnet-install.sh -O /tmp/dotnet-install.sh \
             && chmod +x /tmp/dotnet-install.sh \
             && /tmp/dotnet-install.sh --channel 9.0 --runtime dotnet --install-dir /usr/share/dotnet \
             && ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet \
             && rm /tmp/dotnet-install.sh
 
-# Steam client bootstrap. Its runtime unpacks into the volume on first start,
-# which is why the egg asks for a few GB of disk.
+# Steam's runtime unpacks into the volume on first start, hence the disk requirement.
 RUN         mkdir -p /opt/steam \
             && curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steam.deb -o /tmp/steam.deb \
             && dpkg -x /tmp/steam.deb /opt/steam \

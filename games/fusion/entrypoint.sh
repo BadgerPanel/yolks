@@ -8,7 +8,7 @@ export DISPLAY=:99
 export LD_LIBRARY_PATH=/home/container:${LD_LIBRARY_PATH}
 
 # ---- virtual display ----
-# The Steam client refuses to start without one, even headless.
+# Steam refuses to start without one, even headless.
 rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
 Xvfb :99 -screen 0 1024x768x24 >/dev/null 2>&1 &
 
@@ -23,7 +23,7 @@ if [ ! -e /tmp/.X11-unix/X99 ]; then
 fi
 
 # ---- steam ----
-# SteamAPI.Init needs a signed-in client, so this must come up before the server.
+# SteamAPI.Init needs a signed-in client, so Steam must come up first.
 if [ -z "${STEAM_USER}" ] || [ -z "${STEAM_PASS}" ]; then
     echo "STEAM_USER and STEAM_PASS are required."
     echo "Use a separate account with SteamVR (app 250820, free) and Steam Guard off."
@@ -50,8 +50,7 @@ echo "Steam is running. Waiting for it to settle..."
 sleep 15
 
 # ---- configuration ----
-# Environment variables own their own keys; everything else in server.json is
-# left exactly as it was, so bans and the mod catalogue survive a restart.
+# Env vars own their own keys; everything else in server.json survives untouched.
 if [ ! -f /home/container/server.json ]; then
     cp /home/container/server.example.json /home/container/server.json
 fi
