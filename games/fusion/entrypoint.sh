@@ -616,6 +616,27 @@ echo "SteamAPI_Init every 5s for ten minutes. Updating on first run is normal."
     echo "[panel] loopback only, which is the server's fault rather than the network's."
 ) &
 
+# Steam replaces its whole runtime whenever it updates itself, which puts the
+# namespace check back and kills the client. That can happen long after startup,
+# so keep putting the no-op back and restart the client when it dies, rather than
+# only doing it while waiting.
+(
+    while true; do
+        if disarm_requirement_checks >/dev/null 2>&1; then
+            echo "[steam] put the namespace check back to a no-op after an update."
+        fi
+
+        if ! steam_alive; then
+            echo "[steam] the client is not running; restarting it."
+            disarm_requirement_checks >/dev/null 2>&1
+            start_steam
+            sleep 25
+        fi
+
+        sleep 5
+    done
+) &
+
 # ---- run ----
 MODIFIED_STARTUP=$(echo -e ${STARTUP} | sed -e 's/{{/${/g' -e 's/}}/}/g')
 echo -e ":/home/container$ ${MODIFIED_STARTUP}"
