@@ -94,6 +94,25 @@ if [ ! -e /tmp/.X11-unix/X99 ]; then
     exit 1
 fi
 
+STEAM_CHECK=/home/container/.local/share/Steam/ubuntu12_32/steam-runtime/amd64/usr/bin/steam-runtime-check-requirements
+
+# steam.sh runs its requirement check only when this binary is executable, and
+# otherwise logs "continuing anyway". The check demands an unprivileged user
+# namespace for bubblewrap, which many hosts refuse. The sandbox adds nothing
+# here because the container is already the boundary.
+disarm_requirement_check() {
+    [ -f "${STEAM_CHECK}" ] || return 1
+
+    chmod a-x "${STEAM_CHECK}" 2>/dev/null || return 1
+
+    return 0
+}
+
+# Covers a volume from an earlier image, or one Steam has since self-updated.
+if disarm_requirement_check; then
+    echo "Disabled Steam's user-namespace requirement check."
+fi
+
 # ---- user namespaces ----
 # Steam sandboxes itself with bubblewrap and refuses to start when the kernel
 # will not give it an unprivileged user namespace. Tested by asking for one,
@@ -102,14 +121,17 @@ fi
 # rather than a node setting, and that is an afternoon lost every time.
 # A missing unshare must not be read as a blocked namespace, or the check
 # stops a node that was fine.
+# Informational since the requirement check above is disabled. Steam starts either
+# way now, but a node that allows namespaces lets Steam keep its own sandbox, so
+# it is still worth reporting rather than silently running without one.
 if command -v unshare >/dev/null 2>&1 && ! unshare --user --map-root-user true >/dev/null 2>&1; then
-    echo "Steam needs unprivileged user namespaces and this node does not allow them."
-    echo "Ask the node administrator to apply these settings:"
+    echo "Note: this node blocks unprivileged user namespaces, so Steam runs without"
+    echo "its bubblewrap sandbox. The container is the boundary instead, and the"
+    echo "server works. To give Steam its sandbox back, the node administrator can set:"
     echo "  Debian: kernel.unprivileged_userns_clone=1"
     echo "  Ubuntu 24.04 and newer: also kernel.apparmor_restrict_unprivileged_userns=0"
     echo "  Every host: user.max_user_namespaces must be more than 0"
-    echo "Put them in /etc/sysctl.d/99-steam-userns.conf then run sysctl --system."
-    exit 1
+    echo "in /etc/sysctl.d/99-steam-userns.conf, then run sysctl --system."
 fi
 
 # ---- steam ----
@@ -154,6 +176,7 @@ echo "Waiting for Steam to finish bootstrapping (first run downloads its runtime
 
 STEAM_CLIENT=""
 DEAD=0
+RETRIED=0
 LAST_REPORTED=""
 
 STEAM_CONSOLE=/home/container/.local/share/Steam/logs/console-linux.txt
@@ -211,6 +234,21 @@ for i in $(seq 1 180); do
         fi
 
         if [ "${DEAD}" -ge 3 ]; then
+            # On a fresh volume Steam unpacks the runtime and then dies on the
+            # requirement check before we ever saw the binary. Clear it and give
+            # Steam one more go rather than failing the start.
+            if [ "${RETRIED}" -eq 0 ] && disarm_requirement_check; then
+                echo "Steam stopped on its user-namespace check. Disabled it, starting again."
+                RETRIED=1
+                DEAD=0
+
+                steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser \
+                    >>/home/container/steam.log 2>&1 &
+
+                sleep 5
+                continue
+            fi
+
             echo "Steam exited while starting up. Last lines of its console log:"
             tail -40 "${STEAM_CONSOLE}" 2>/dev/null
             echo "--- launcher output ---"
