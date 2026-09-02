@@ -110,7 +110,12 @@ steam_alive() {
 
 if ! steam_alive; then
     echo "Signing in to Steam as ${STEAM_USER}..."
-    steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser >/home/container/steam.log 2>&1 &
+    if command -v stdbuf >/dev/null 2>&1; then
+        stdbuf -oL -eL steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser \
+            >/home/container/steam.log 2>&1 &
+    else
+        steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser >/home/container/steam.log 2>&1 &
+    fi
 fi
 
 # On a fresh volume Steam downloads its runtime, which takes minutes rather than
@@ -133,7 +138,31 @@ STEAM_CLIENT=""
 DEAD=0
 LAST_REPORTED=""
 
+steam_snapshot() {
+    echo "--- what the container actually has (one-off diagnostic) ---"
+    echo "xz:    $(command -v xz || echo MISSING)"
+    echo "steam: $(command -v steam || echo MISSING)"
+
+    echo "Steam dir:"
+    ls -la /home/container/.local/share/Steam/ 2>/dev/null | head -12 || echo "  does not exist"
+
+    for candidate in /home/container/.local/share/Steam/ubuntu12_32/steam \
+                     /home/container/.local/share/Steam/ubuntu12_64/steam; do
+        if [ -f "${candidate}" ]; then
+            echo "Client binary ${candidate}:"
+            ldd "${candidate}" 2>&1 | grep -i "not found" | head -10 \
+                || echo "  all shared libraries resolve"
+        fi
+    done
+
+    echo "Steam processes:"
+    ps -ef 2>/dev/null | grep "[s]team" | head -5
+    echo "--- end diagnostic ---"
+}
+
 for i in $(seq 1 180); do
+    [ "${i}" -eq 6 ] && steam_snapshot
+
     if STEAM_CLIENT=$(find_steamclient); then
         echo "Steam is ready: ${STEAM_CLIENT}"
         break
