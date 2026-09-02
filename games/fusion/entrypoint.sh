@@ -94,24 +94,54 @@ if [ ! -e /tmp/.X11-unix/X99 ]; then
     exit 1
 fi
 
-STEAM_CHECK=/home/container/.local/share/Steam/ubuntu12_32/steam-runtime/amd64/usr/bin/steam-runtime-check-requirements
+STEAM_ROOT=/home/container/.local/share/Steam
 
-# steam.sh runs its requirement check only when this binary is executable, and
-# otherwise logs "continuing anyway". The check demands an unprivileged user
-# namespace for bubblewrap, which many hosts refuse. The sandbox adds nothing
-# here because the container is already the boundary.
-disarm_requirement_check() {
-    [ -f "${STEAM_CHECK}" ] || return 1
+# steam.sh runs this binary and refuses to start if it reports failure. It demands
+# an unprivileged user namespace for bubblewrap, which many container hosts refuse.
+# The sandbox adds nothing here because the container is already the boundary.
+#
+# Clearing the executable bit is not enough: steam.sh runs the runtime's own
+# setup.sh first, which restores permissions. Replacing the binary with a no-op
+# that exits 0 survives that, and steam.sh then logs that requirements are met.
+#
+# Every unpacked copy is handled rather than one assumed path, because the runtime
+# directory name has changed across Steam versions.
+disarm_requirement_checks() {
+    found=0
+    changed=0
 
-    chmod a-x "${STEAM_CHECK}" 2>/dev/null || return 1
+    for check in $(find "${STEAM_ROOT}" -type f -name steam-runtime-check-requirements 2>/dev/null); do
+        found=$((found + 1))
 
-    return 0
+        grep -q 'fusion-dedicated no-op' "${check}" 2>/dev/null && continue
+
+        {
+            echo '#!/bin/sh'
+            echo '# fusion-dedicated no-op: the container is the sandbox boundary,'
+            echo '# so Steam does not need a user namespace of its own here.'
+            echo 'exit 0'
+        } > "${check}" 2>/dev/null || continue
+
+        chmod +x "${check}" 2>/dev/null || continue
+
+        changed=$((changed + 1))
+    done
+
+    if [ "${found}" -eq 0 ]; then
+        echo "Steam's runtime is not unpacked yet; its namespace check will be replaced once it appears."
+        return 1
+    fi
+
+    if [ "${changed}" -gt 0 ]; then
+        echo "Replaced Steam's user-namespace check with a no-op (${changed} of ${found})."
+        return 0
+    fi
+
+    echo "Steam's user-namespace check is already a no-op."
+    return 1
 }
 
-# Covers a volume from an earlier image, or one Steam has since self-updated.
-if disarm_requirement_check; then
-    echo "Disabled Steam's user-namespace requirement check."
-fi
+disarm_requirement_checks
 
 # ---- user namespaces ----
 # Tested by asking the kernel for a namespace rather than reading a sysctl,
@@ -247,7 +277,7 @@ for i in $(seq 1 180); do
             # On a fresh volume Steam unpacks the runtime and then dies on the
             # requirement check before we ever saw the binary. Clear it and give
             # Steam one more go rather than failing the start.
-            if [ "${RETRIED}" -eq 0 ] && disarm_requirement_check; then
+            if [ "${RETRIED}" -eq 0 ] && disarm_requirement_checks; then
                 echo "Steam stopped on its user-namespace check. Disabled it, starting again."
                 RETRIED=1
                 DEAD=0
