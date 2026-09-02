@@ -7,6 +7,11 @@ export INTERNAL_IP
 export DISPLAY=:99
 export LD_LIBRARY_PATH=/home/container:${LD_LIBRARY_PATH}
 
+# Wings reuses a cached image when the tag has not changed under it, so a run can
+# silently use an old entrypoint. Print a hash of this file so the version being
+# run is never in doubt.
+echo "Entrypoint build: $(sha256sum "$0" 2>/dev/null | cut -c1-12 || echo unknown)"
+
 # ---- configuration ----
 # Applied before anything can fail, so the panel's variables reach server.json
 # even when Steam does not come up. Env vars own their own keys; everything else
