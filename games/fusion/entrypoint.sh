@@ -422,6 +422,14 @@ fi
 echo "--- Steam's own log, at the moment the server starts ---"
 tail -60 "${STEAM_CONSOLE}" 2>/dev/null | redact || echo "  (no console log written)"
 echo "--- end of Steam log ---"
+
+# Steam not signing in is the single reason a server stays invisible, so pull the
+# lines that say why out of a log too long to read on a console.
+echo "--- what Steam says about signing in ---"
+grep -iE "logon|log ?in|sign ?in|steam ?guard|two.factor|auth|password|credential|account name"     "${STEAM_CONSOLE}" 2>/dev/null | redact | tail -25     || echo "  (nothing about login in the console log)"
+echo "--- end ---"
+
+echo "Memory: $(cat /sys/fs/cgroup/memory.max 2>/dev/null     || cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null     || echo unknown) bytes. Steam's UI needs roughly 1.5G to start."
 echo "Steam signs in on its own schedule, so the server now retries"
 echo "SteamAPI_Init every 5s for ten minutes. Updating on first run is normal."
 
