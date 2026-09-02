@@ -443,6 +443,21 @@ echo "SteamAPI_Init every 5s for ten minutes. Updating on first run is normal."
 # not stay noisy for the life of the server.
 ( timeout 720 tail -n 0 -F "${STEAM_CONSOLE}" 2>/dev/null | redact | sed -u "s/^/[steam] /" ) &
 
+# The panel binds every interface, so if it answers here and not from outside,
+# the problem is the network rather than the server. Says which without guessing.
+(
+    sleep 45
+    code=$(curl -s -o /dev/null -m 5 -w "%{http_code}"         "http://127.0.0.1:${SERVER_PORT:-8778}/" 2>/dev/null)
+
+    if [ -z "${code}" ] || [ "${code}" = "000" ]; then
+        echo "[panel] nothing answering on 127.0.0.1:${SERVER_PORT:-8778} inside the container."
+    else
+        echo "[panel] answers HTTP ${code} inside the container, so it is listening."
+        echo "[panel] if http://${SERVER_IP}:${SERVER_PORT:-8778}/ is refused from outside,"
+        echo "[panel] the port is allocated but not reachable, which is a node firewall matter."
+    fi
+) &
+
 # ---- run ----
 MODIFIED_STARTUP=$(echo -e ${STARTUP} | sed -e 's/{{/${/g' -e 's/}}/}/g')
 echo -e ":/home/container$ ${MODIFIED_STARTUP}"
