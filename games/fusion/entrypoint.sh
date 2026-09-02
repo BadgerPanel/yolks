@@ -282,11 +282,20 @@ steamcmd_login() {
         return 1
     fi
 
-    _cfg=/home/container/.steamcmd-home/Steam/config
-    [ -d "${_cfg}" ] || _cfg="${_sc}/config"
+    # steamcmd.sh sets its root to its own directory, so its config lands beside
+    # the script rather than under HOME.
+    _cfg="${_sc}/config"
+    [ -d "${_cfg}" ] || _cfg=/home/container/.steamcmd-home/Steam/config
 
-    echo "[steamcmd] files written:"
+    echo "[steamcmd] files written to ${_cfg}:"
     ls -la "${_cfg}" 2>/dev/null | tail -n +2 || echo "  no config directory at all"
+
+    # The client needs a token to sign in unattended. Name the keys present so a
+    # sign-in that produced no usable credential is obvious.
+    if [ -f "${_cfg}/config.vdf" ]; then
+        echo "[steamcmd] credential keys in config.vdf:"
+        grep -oiE "\"(ConnectCache|Accounts|SentryFile|MostRecent|RefreshToken)\""             "${_cfg}/config.vdf" 2>/dev/null | sort -u | sed "s/^/  /"             || echo "  none of the expected keys"
+    fi
 
     if [ "${_rc}" -ne 0 ] || [ ! -f "${_cfg}/config.vdf" ]; then
         echo "steamcmd did not sign in, so the client has no credentials to reuse."
