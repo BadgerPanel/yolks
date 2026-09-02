@@ -95,23 +95,27 @@ if [ ! -e /tmp/.X11-unix/X99 ]; then
 fi
 
 STEAM_ROOT=/home/container/.local/share/Steam
+STEAM_BOOTSTRAP=/usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz
 
-# steam.sh runs this binary and refuses to start if it reports failure. It demands
-# an unprivileged user namespace for bubblewrap, which many container hosts refuse.
-# The sandbox adds nothing here because the container is already the boundary.
+# steam.sh runs steam-runtime-check-requirements and refuses to start if it fails.
+# It demands an unprivileged user namespace for bubblewrap, which many container
+# hosts disallow. The sandbox adds nothing here because the container is already
+# the boundary, so the check is replaced with a no-op that exits 0.
 #
-# Clearing the executable bit is not enough: steam.sh runs the runtime's own
-# setup.sh first, which restores permissions. Replacing the binary with a no-op
-# that exits 0 survives that, and steam.sh then logs that requirements are met.
-#
-# Every unpacked copy is handled rather than one assumed path, because the runtime
-# directory name has changed across Steam versions.
+# Globs rather than find: a missing find would fail silently and this has to work.
+# Both known runtime layouts are covered, and a non-matching glob stays literal,
+# which the -f test discards.
 disarm_requirement_checks() {
-    found=0
-    changed=0
+    _found=0
+    _changed=0
 
-    for check in $(find "${STEAM_ROOT}" -type f -name steam-runtime-check-requirements 2>/dev/null); do
-        found=$((found + 1))
+    for check in \
+        "${STEAM_ROOT}"/*/steam-runtime/*/usr/bin/steam-runtime-check-requirements \
+        "${STEAM_ROOT}"/*/steam-runtime/usr/bin/steam-runtime-check-requirements
+    do
+        [ -f "${check}" ] || continue
+
+        _found=$((_found + 1))
 
         grep -q 'fusion-dedicated no-op' "${check}" 2>/dev/null && continue
 
@@ -124,24 +128,41 @@ disarm_requirement_checks() {
 
         chmod +x "${check}" 2>/dev/null || continue
 
-        changed=$((changed + 1))
+        _changed=$((_changed + 1))
     done
 
-    if [ "${found}" -eq 0 ]; then
-        echo "Steam's runtime is not unpacked yet; its namespace check will be replaced once it appears."
-        return 1
-    fi
+    [ "${_found}" -eq 0 ] && return 1
+    [ "${_changed}" -gt 0 ] && return 0
 
-    if [ "${changed}" -gt 0 ]; then
-        echo "Replaced Steam's user-namespace check with a no-op (${changed} of ${found})."
-        return 0
-    fi
-
-    echo "Steam's user-namespace check is already a no-op."
     return 1
 }
 
-disarm_requirement_checks
+# Unpack the bootstrap ourselves so the check exists before Steam ever reads it.
+# Steam's own launcher does this and then immediately runs the check, leaving no
+# moment to intervene; doing it here removes the race entirely. bin_steam.sh skips
+# its own setup when steam.sh is present and the data link resolves.
+if [ ! -x "${STEAM_ROOT}/steam.sh" ] && [ -f "${STEAM_BOOTSTRAP}" ]; then
+    echo "Unpacking Steam's bootstrap so its namespace check can be replaced first..."
+
+    mkdir -p "${STEAM_ROOT}"
+
+    if tar xJf "${STEAM_BOOTSTRAP}" -C "${STEAM_ROOT}" 2>/dev/null; then
+        mkdir -p /home/container/.steam
+        ln -fns "${STEAM_ROOT}" /home/container/.steam/steam
+    else
+        echo "Could not unpack it here; leaving Steam to do it."
+    fi
+fi
+
+if disarm_requirement_checks; then
+    echo "Replaced Steam's user-namespace check with a no-op."
+else
+    if [ -x "${STEAM_ROOT}/steam.sh" ]; then
+        echo "Steam's user-namespace check is already a no-op."
+    else
+        echo "Steam's runtime is not unpacked yet; the check will be replaced once it appears."
+    fi
+fi
 
 # ---- user namespaces ----
 # Tested by asking the kernel for a namespace rather than reading a sysctl,
