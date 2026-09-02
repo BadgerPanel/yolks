@@ -261,6 +261,16 @@ find_steamclient() {
 
 echo "Waiting for Steam to finish bootstrapping (first run downloads its runtime)..."
 
+# SteamAPI_IsSteamRunning reads ~/.steam/steam.pid and checks that process is
+# alive, so that file is what "logged in and serving" actually looks like.
+# steamclient.so ships in the bootstrap and appears minutes earlier.
+steam_pid_alive() {
+    [ -f /home/container/.steam/steam.pid ] || return 1
+    pid=$(cat /home/container/.steam/steam.pid 2>/dev/null)
+    [ -n "${pid}" ] || return 1
+    kill -0 "${pid}" 2>/dev/null
+}
+
 STEAM_CLIENT=""
 DEAD=0
 RETRIED=0
@@ -305,6 +315,13 @@ steam_snapshot() {
 
     # steam -login puts the password on the command line, so it shows in ps.
     # Strip it before anything reaches the console.
+    echo "Steam pid file:"
+    if [ -f /home/container/.steam/steam.pid ]; then
+        echo "  ~/.steam/steam.pid holds $(cat /home/container/.steam/steam.pid 2>/dev/null)"
+    else
+        echo "  not written yet, so Steam has not signed in"
+    fi
+
     echo "Steam processes:"
     ps -ef 2>/dev/null | grep "[s]team" | redact | head -5
     echo "--- end diagnostic ---"
@@ -328,8 +345,9 @@ for i in $(seq 1 180); do
         continue
     fi
 
-    if STEAM_CLIENT=$(find_steamclient); then
+    if STEAM_CLIENT=$(find_steamclient) && steam_pid_alive; then
         echo "Steam is ready: ${STEAM_CLIENT}"
+        echo "Steam signed in after $((i * 5))s."
         break
     fi
 
@@ -371,6 +389,13 @@ for i in $(seq 1 180); do
 
     sleep 5
 done
+
+if [ -n "${STEAM_CLIENT}" ] && ! steam_pid_alive; then
+    echo "Steam unpacked but never signed in within fifteen minutes."
+    echo "Starting anyway; the server retries for another ten minutes."
+    echo "If it never connects, check the account for Steam Guard:"
+    grep -iE "steam guard|two.factor|login fail|invalid password|logon deni"         "${STEAM_CONSOLE}" 2>/dev/null | redact | tail -10         || echo "  (nothing in the console log about login)"
+fi
 
 if [ -z "${STEAM_CLIENT}" ]; then
     echo "Steam did not finish bootstrapping in fifteen minutes."
