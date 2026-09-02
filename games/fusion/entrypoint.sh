@@ -15,6 +15,17 @@ if [ ! -f /home/container/server.json ]; then
     cp /home/container/server.example.json /home/container/server.json
 fi
 
+# jq --argjson needs a real JSON literal. A panel can hand us 1, TRUE or yes, and
+# any of those would write a non-boolean into server.json that the server then
+# refuses to read.
+as_bool() {
+    case "$(printf '%s' "${1}" | tr '[:upper:]' '[:lower:]')" in
+        1|true|yes|on)   printf 'true' ;;
+        0|false|no|off)  printf 'false' ;;
+        *)               printf '%s' "${2}" ;;
+    esac
+}
+
 jq \
   --arg name        "${SERVER_NAME:-My Fusion Server}" \
   --arg description "${SERVER_DESCRIPTION:-}" \
@@ -28,9 +39,9 @@ jq \
   --argjson major     "${FUSION_VERSION_MAJOR:-1}" \
   --argjson minor     "${FUSION_VERSION_MINOR:-14}" \
   --argjson entities  "${MAX_ENTITIES:-2000}" \
-  --argjson global    "${GLOBAL_LISTS:-true}" \
-  --argjson extended  "${EXTENDED_PROTECTION:-true}" \
-  --argjson antispam  "${ANTISPAM:-true}" \
+  --argjson global    "$(as_bool "${GLOBAL_LISTS}" true)" \
+  --argjson extended  "$(as_bool "${EXTENDED_PROTECTION}" true)" \
+  --argjson antispam  "$(as_bool "${ANTISPAM}" true)" \
   --argjson burst     "${SPAWN_BURST_LIMIT:-25}" \
   --argjson perPlayer "${MAX_ENTITIES_PER_PLAYER:-300}" \
   --argjson panelPort "${SERVER_PORT:-8778}" \
