@@ -195,6 +195,11 @@ fi
 
 echo "Allocation: ip=${SERVER_IP:-<unset>} port=${SERVER_PORT:-<unset>} rcon=${RCON_PORT:-<unset>}"
 
+if [ -n "${SERVER_PORT}" ] && [ "${RCON_PORT:-27015}" = "${SERVER_PORT}" ]; then
+    echo "The panel and RCON are both set to port ${SERVER_PORT}. The panel takes it"
+    echo "and RCON will not start. Give RCON its own allocation to run both."
+fi
+
 if [ -z "${SERVER_PORT}" ]; then
     echo "SERVER_PORT is not set, so the panel falls back to 8778. Pterodactyl only"
     echo "publishes ports it allocated, so give the server an allocation and the"
