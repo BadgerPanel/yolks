@@ -49,9 +49,13 @@ RUN         wget -q https://dot.net/v1/dotnet-install.sh -O /tmp/dotnet-install.
 RUN         curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steam.deb -o /tmp/steam.deb \
             && apt-get update \
             && apt-get install -y --no-install-recommends /tmp/steam.deb \
+            && apt-get install -y --no-install-recommends \
+                steam-libs-amd64 steam-libs-i386 libgl1-mesa-dri libgl1-mesa-dri:i386 \
             && rm /tmp/steam.deb \
             && apt-get clean \
             && rm -rf /var/lib/apt/lists/* \
+            && dpkg -s steam-libs-amd64 > /dev/null \
+            && dpkg -s steam-libs-i386 > /dev/null \
             && command -v steam
 
 # Steam's Debian packaging runs steamdeps on first launch, which opens an xterm
