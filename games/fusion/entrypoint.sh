@@ -138,6 +138,14 @@ STEAM_CLIENT=""
 DEAD=0
 LAST_REPORTED=""
 
+STEAM_CONSOLE=/home/container/.local/share/Steam/logs/console-linux.txt
+
+# The newest line Steam has written, from whichever log actually has content.
+steam_latest() {
+    tail -1 "${STEAM_CONSOLE}" 2>/dev/null | tr -d '\r' \
+        || tail -1 /home/container/steam.log 2>/dev/null | tr -d '\r'
+}
+
 steam_snapshot() {
     echo "--- what the container actually has (one-off diagnostic) ---"
     echo "xz:    $(command -v xz || echo MISSING)"
@@ -157,6 +165,9 @@ steam_snapshot() {
 
     # steam -login puts the password on the command line, so it shows up in ps.
     # Strip it before anything reaches the console.
+    echo "Steam log directory:"
+    ls -la /home/container/.local/share/Steam/logs/ 2>/dev/null | head -8 || echo "  none yet"
+
     echo "Steam processes:"
     ps -ef 2>/dev/null | grep "[s]team"         | sed -e "s/-login [^ ]* [^ ]*/-login <redacted> <redacted>/g" | head -5
     echo "--- end diagnostic ---"
@@ -182,8 +193,10 @@ for i in $(seq 1 180); do
         fi
 
         if [ "${DEAD}" -ge 3 ]; then
-            echo "Steam exited while starting up. Last lines of steam.log:"
-            tail -40 /home/container/steam.log 2>/dev/null
+            echo "Steam exited while starting up. Last lines of its console log:"
+            tail -40 "${STEAM_CONSOLE}" 2>/dev/null
+            echo "--- launcher output ---"
+            tail -20 /home/container/steam.log 2>/dev/null
             exit 1
         fi
     fi
@@ -191,7 +204,7 @@ for i in $(seq 1 180); do
     # A bare counter tells you nothing about whether Steam is working or stuck.
     # Echo its latest output instead, and only when it changes.
     if [ $((i % 6)) -eq 0 ]; then
-        LATEST=$(tail -1 /home/container/steam.log 2>/dev/null | tr -d '\r')
+        LATEST=$(steam_latest)
 
         if [ "${LATEST}" != "${LAST_REPORTED}" ] && [ -n "${LATEST}" ]; then
             echo "  ($((i * 5))s) ${LATEST}"
@@ -209,8 +222,10 @@ done
 
 if [ -z "${STEAM_CLIENT}" ]; then
     echo "Steam did not finish bootstrapping in fifteen minutes."
-    echo "--- steam.log ---"
-    tail -40 /home/container/steam.log 2>/dev/null
+    echo "--- Steam console log ---"
+    tail -60 "${STEAM_CONSOLE}" 2>/dev/null || echo "  (no console log written)"
+    echo "--- launcher output ---"
+    tail -20 /home/container/steam.log 2>/dev/null
     echo "--- what exists ---"
     ls -la /home/container/.local/share/Steam/ 2>/dev/null | head -20
     exit 1
