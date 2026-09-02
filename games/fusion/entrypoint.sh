@@ -309,15 +309,48 @@ steamcmd_login() {
 
     mkdir -p "${STEAM_CONFIG_DIR}"
 
-    for f in config.vdf loginusers.vdf; do
+    for f in config.vdf; do
         if [ -f "${_cfg}/${f}" ]; then
             cp -f "${_cfg}/${f}" "${STEAM_CONFIG_DIR}/${f}"
             echo "[steamcmd] handed ${f} to the client."
         fi
     done
 
+    # steamcmd writes config.vdf but no loginusers.vdf, and that is the file the
+    # client reads to decide which account may sign in without being asked. Build
+    # it from the SteamID steamcmd recorded against the account.
+    _id=$(awk -v want="${STEAM_USER}" '
+        BEGIN { IGNORECASE = 1 }
+        $0 ~ "\"" want "\"" { found = 1 }
+        found && /SteamID/ {
+            if (match($0, /[0-9]{17}/)) { print substr($0, RSTART, RLENGTH); exit }
+        }
+    ' "${_cfg}/config.vdf" 2>/dev/null)
+
+    if [ -z "${_id}" ]; then
+        echo "steamcmd signed in but recorded no SteamID for ${STEAM_USER},"
+        echo "so the client has nothing to sign in with."
+        return 1
+    fi
+
+    cat > "${STEAM_CONFIG_DIR}/loginusers.vdf" <<USEREOF
+"users"
+{
+	"${_id}"
+	{
+		"AccountName"		"${STEAM_USER}"
+		"RememberPassword"		"1"
+		"WantsOfflineMode"		"0"
+		"SkipOfflineModeWarning"		"0"
+		"AllowAutoLogin"		"1"
+		"MostRecent"		"1"
+		"Timestamp"		"$(date +%s)"
+	}
+}
+USEREOF
+
     write_autologin
-    echo "steamcmd signed in as ${STEAM_USER}."
+    echo "steamcmd signed in as ${STEAM_USER} (${_id})."
     return 0
 }
 
