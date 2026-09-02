@@ -179,14 +179,27 @@ steam_alive() {
         | grep -qE "[s]team\.sh|[u]buntu12_(32|64)/steam( |$)|[/]usr/bin/steam( |$)"
 }
 
-if ! steam_alive; then
-    echo "Signing in to Steam as ${STEAM_USER}..."
+start_steam() {
     if command -v stdbuf >/dev/null 2>&1; then
         stdbuf -oL -eL steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser \
-            >/home/container/steam.log 2>&1 &
+            >>/home/container/steam.log 2>&1 &
     else
-        steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser >/home/container/steam.log 2>&1 &
+        steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser >>/home/container/steam.log 2>&1 &
     fi
+}
+
+# steam.sh reports a failed requirement check through show_message, which opens a
+# dialog on the virtual display and waits. The process therefore stays alive after
+# it has already given up, so waiting for it to exit never ends.
+stop_steam() {
+    pkill -f "[s]team\.sh" 2>/dev/null
+    pkill -f "[u]buntu12_32/steam" 2>/dev/null
+    sleep 3
+}
+
+if ! steam_alive; then
+    echo "Signing in to Steam as ${STEAM_USER}..."
+    start_steam
 fi
 
 # On a fresh volume Steam downloads its runtime, which takes minutes rather than
@@ -257,6 +270,21 @@ steam_snapshot() {
 for i in $(seq 1 180); do
     [ "${i}" -eq 6 ] && steam_snapshot
 
+    # On a fresh volume the check binary only exists once Steam has unpacked the
+    # runtime, which is after we first looked. Catch it here and restart Steam,
+    # because by now it has either failed the check or is stuck showing the error.
+    if [ "${RETRIED}" -eq 0 ] && disarm_requirement_checks >/dev/null 2>&1; then
+        echo "Neutralised Steam's user-namespace check; restarting Steam."
+        RETRIED=1
+        DEAD=0
+
+        stop_steam
+        start_steam
+
+        sleep 5
+        continue
+    fi
+
     if STEAM_CLIENT=$(find_steamclient); then
         echo "Steam is ready: ${STEAM_CLIENT}"
         break
@@ -274,26 +302,6 @@ for i in $(seq 1 180); do
         fi
 
         if [ "${DEAD}" -ge 3 ]; then
-            # On a fresh volume Steam unpacks the runtime and then dies on the
-            # requirement check before we ever saw the binary. Clear it and give
-            # Steam one more go rather than failing the start.
-            if [ "${RETRIED}" -eq 0 ] && disarm_requirement_checks; then
-                echo "Steam stopped on its user-namespace check. Disabled it, starting again."
-                RETRIED=1
-                DEAD=0
-
-                if command -v stdbuf >/dev/null 2>&1; then
-                    stdbuf -oL -eL steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser \
-                        >>/home/container/steam.log 2>&1 &
-                else
-                    steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser \
-                        >>/home/container/steam.log 2>&1 &
-                fi
-
-                sleep 5
-                continue
-            fi
-
             echo "Steam exited while starting up. Last lines of its console log:"
             tail -40 "${STEAM_CONSOLE}" 2>/dev/null
             echo "--- launcher output ---"
