@@ -242,12 +242,16 @@ steam_alive() {
         | grep -qE "[s]team\.sh|[u]buntu12_(32|64)/steam( |$)|[/]usr/bin/steam( |$)"
 }
 
+# Steam's React login rewrite stopped -login being read, which is why the console
+# log records the credentials on the command line and then never attempts a
+# sign-in. -noreactlogin restores the old path and has to come first.
 start_steam() {
     if command -v stdbuf >/dev/null 2>&1; then
-        stdbuf -oL -eL steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser \
+        stdbuf -oL -eL steam -noreactlogin -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser \
             >>/home/container/steam.log 2>&1 &
     else
-        steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser >>/home/container/steam.log 2>&1 &
+        steam -noreactlogin -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser \
+            >>/home/container/steam.log 2>&1 &
     fi
 }
 
