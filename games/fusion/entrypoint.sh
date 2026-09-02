@@ -201,6 +201,71 @@ if [ -z "${SERVER_PORT}" ]; then
     echo "panel will follow it."
 fi
 
+# ---- steam login from the command line ----
+# Steam's client dropped its -login flag, but steamcmd kept one, and both keep
+# their credentials in config/config.vdf and config/loginusers.vdf. So sign in
+# with steamcmd and hand the result to the client, which auto-signs-in when it
+# finds a token and an AutoLoginUser.
+STEAM_CONFIG_DIR="${STEAM_ROOT}/config"
+
+already_signed_in() {
+    grep -qi "${STEAM_USER}" "${STEAM_CONFIG_DIR}/loginusers.vdf" 2>/dev/null
+}
+
+# The client reads this to decide whether to sign in without being asked.
+write_autologin() {
+    mkdir -p /home/container/.steam
+
+    cat > /home/container/.steam/registry.vdf <<REGEOF
+"Registry"
+{
+	"HKCU"
+	{
+		"Software"
+		{
+			"Valve"
+			{
+				"Steam"
+				{
+					"AutoLoginUser"		"${STEAM_USER}"
+					"RememberPassword"		"1"
+					"SkipOfflineModeWarning"		"1"
+				}
+			}
+		}
+	}
+}
+REGEOF
+}
+
+steamcmd_login() {
+    echo "Signing in with steamcmd so the client can reuse the credentials..."
+
+    rm -rf /home/container/.steamcmd-home
+    mkdir -p /home/container/.steamcmd-home
+
+    HOME=/home/container/.steamcmd-home timeout 300 /opt/steamcmd/steamcmd.sh         +@ShutdownOnFailedCommand 1         +login "${STEAM_USER}" "${STEAM_PASS}" ${STEAM_GUARD_CODE}         +quit 2>&1 | redact | sed -u "s/^/[steamcmd] /"
+
+    _cfg=/home/container/.steamcmd-home/Steam/config
+
+    if [ ! -f "${_cfg}/config.vdf" ]; then
+        echo "steamcmd did not write a credential file, so the sign-in failed."
+        echo "If it asked for a Steam Guard code above, put one in STEAM_GUARD_CODE"
+        echo "and restart. Codes expire quickly, so use a fresh one."
+        return 1
+    fi
+
+    mkdir -p "${STEAM_CONFIG_DIR}"
+
+    for f in config.vdf loginusers.vdf; do
+        [ -f "${_cfg}/${f}" ] && cp -f "${_cfg}/${f}" "${STEAM_CONFIG_DIR}/${f}"
+    done
+
+    write_autologin
+    echo "steamcmd signed in and the credentials were handed to the client."
+    return 0
+}
+
 # ---- steam login through a browser ----
 # SteamMatchmaking.CreateLobby is a user API, so this needs a signed-in account
 # rather than a game server token. Steam's own login runs in its UI, which has no
@@ -270,13 +335,14 @@ steam_alive() {
 # Steam's React login rewrite stopped -login being read, which is why the console
 # log records the credentials on the command line and then never attempts a
 # sign-in. -noreactlogin restores the old path and has to come first.
+# No -login here. Steam ignores it, and leaving it off keeps the password out of
+# ps and out of Steam's own logs. The client signs in from the credentials
+# steamcmd cached and the AutoLoginUser written next to them.
 start_steam() {
     if command -v stdbuf >/dev/null 2>&1; then
-        stdbuf -oL -eL steam -noreactlogin -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser \
-            >>/home/container/steam.log 2>&1 &
+        stdbuf -oL -eL steam -no-browser -silent >>/home/container/steam.log 2>&1 &
     else
-        steam -noreactlogin -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser \
-            >>/home/container/steam.log 2>&1 &
+        steam -no-browser -silent >>/home/container/steam.log 2>&1 &
     fi
 }
 
@@ -288,6 +354,13 @@ stop_steam() {
     pkill -f "[u]buntu12_32/steam" 2>/dev/null
     sleep 3
 }
+
+if already_signed_in; then
+    echo "Steam already has credentials for ${STEAM_USER}."
+    write_autologin
+else
+    steamcmd_login || echo "Falling back to whatever the client can do on its own."
+fi
 
 if [ "$(as_bool "${STEAM_LOGIN_UI}" false)" = "true" ]; then
     start_login_ui || true

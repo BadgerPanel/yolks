@@ -40,6 +40,14 @@ RUN         dpkg --add-architecture i386 \
             && apt-get clean \
             && rm -rf /var/lib/apt/lists/*
 
+# steamcmd still accepts a command-line login where the client no longer does, so
+# it is what obtains the credentials the client then reuses. Valve's tarball
+# rather than the Debian package, which stops to ask about its licence.
+RUN         mkdir -p /opt/steamcmd \
+            && curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+                | tar xz -C /opt/steamcmd \
+            && test -x /opt/steamcmd/steamcmd.sh
+
 # Runtime only; the server is published framework-dependent.
 RUN         wget -q https://dot.net/v1/dotnet-install.sh -O /tmp/dotnet-install.sh \
             && chmod +x /tmp/dotnet-install.sh \
