@@ -114,16 +114,12 @@ if disarm_requirement_check; then
 fi
 
 # ---- user namespaces ----
-# Steam sandboxes itself with bubblewrap and refuses to start when the kernel
-# will not give it an unprivileged user namespace. Tested by asking for one,
-# because the sysctl that governs it differs between distributions. Steam's own
-# failure is a bwrap line buried in its log, which reads as a broken image
-# rather than a node setting, and that is an afternoon lost every time.
-# A missing unshare must not be read as a blocked namespace, or the check
-# stops a node that was fine.
-# Informational since the requirement check above is disabled. Steam starts either
-# way now, but a node that allows namespaces lets Steam keep its own sandbox, so
-# it is still worth reporting rather than silently running without one.
+# Tested by asking the kernel for a namespace rather than reading a sysctl,
+# because the governing setting differs between distributions. A missing unshare
+# must not be read as a blocked namespace, or this stops a node that was fine.
+# Informational rather than fatal: the requirement check above is disabled, so
+# Steam starts either way. A node that allows namespaces lets Steam keep its own
+# sandbox, which is worth having, so the settings are still worth naming.
 if command -v unshare >/dev/null 2>&1 && ! unshare --user --map-root-user true >/dev/null 2>&1; then
     echo "Note: this node blocks unprivileged user namespaces, so Steam runs without"
     echo "its bubblewrap sandbox. The container is the boundary instead, and the"
@@ -145,7 +141,12 @@ fi
 # Steam's launcher runs as bin_steam.sh, then steam.sh, then the client itself.
 # Matching an exact process name misses all of those, so match the command line.
 steam_alive() {
-    ps -ef 2>/dev/null | grep -q "[s]team"
+    # Match what the client is, not what it is not. A bare "steam" also matches
+    # srt-logger and steamdeps, which outlive the client and would report a dead
+    # one as alive. Excluding "srt-logger" is wrong too: the client's own command
+    # line carries a -srt-logger-opened flag.
+    ps -ef 2>/dev/null \
+        | grep -qE "[s]team\.sh|[u]buntu12_(32|64)/steam( |$)|[/]usr/bin/steam( |$)"
 }
 
 if ! steam_alive; then
@@ -183,8 +184,17 @@ STEAM_CONSOLE=/home/container/.local/share/Steam/logs/console-linux.txt
 
 # The newest line Steam has written, from whichever log actually has content.
 steam_latest() {
-    tail -1 "${STEAM_CONSOLE}" 2>/dev/null | tr -d '\r' \
-        || tail -1 /home/container/steam.log 2>/dev/null | tr -d '\r'
+    line=""
+
+    if [ -s "${STEAM_CONSOLE}" ]; then
+        line=$(tail -1 "${STEAM_CONSOLE}" 2>/dev/null | tr -d '\r')
+    fi
+
+    if [ -z "${line}" ] && [ -s /home/container/steam.log ]; then
+        line=$(tail -1 /home/container/steam.log 2>/dev/null | tr -d '\r')
+    fi
+
+    printf '%s' "${line}"
 }
 
 steam_snapshot() {
@@ -204,13 +214,13 @@ steam_snapshot() {
         fi
     done
 
-    # steam -login puts the password on the command line, so it shows up in ps.
-    # Strip it before anything reaches the console.
     echo "Steam log directory:"
     ls -la /home/container/.local/share/Steam/logs/ 2>/dev/null | head -8 || echo "  none yet"
 
+    # steam -login puts the password on the command line, so it shows in ps.
+    # Strip it before anything reaches the console.
     echo "Steam processes:"
-    ps -ef 2>/dev/null | grep "[s]team"         | sed -e "s/-login [^ ]* [^ ]*/-login <redacted> <redacted>/g" | head -5
+    ps -ef 2>/dev/null | grep "[s]team" | sed -e "s/-login [^ ]* [^ ]*/-login <redacted> <redacted>/g" | head -5
     echo "--- end diagnostic ---"
 }
 
@@ -242,8 +252,13 @@ for i in $(seq 1 180); do
                 RETRIED=1
                 DEAD=0
 
-                steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser \
-                    >>/home/container/steam.log 2>&1 &
+                if command -v stdbuf >/dev/null 2>&1; then
+                    stdbuf -oL -eL steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser \
+                        >>/home/container/steam.log 2>&1 &
+                else
+                    steam -login "${STEAM_USER}" "${STEAM_PASS}" -no-browser \
+                        >>/home/container/steam.log 2>&1 &
+                fi
 
                 sleep 5
                 continue
@@ -266,7 +281,7 @@ for i in $(seq 1 180); do
             echo "  ($((i * 5))s) ${LATEST}"
             LAST_REPORTED="${LATEST}"
         else
-            echo "  ($((i * 5))s) still waiting; steam.log has not moved"
+            echo "  ($((i * 5))s) still waiting; Steam has written nothing new"
         fi
 
         ls -la /home/container/.local/share/Steam/ 2>/dev/null | tail -n +2 | wc -l \
