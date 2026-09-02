@@ -313,7 +313,7 @@ for i in $(seq 1 180); do
 
     # The client library appearing is what actually matters. Process detection is
     # only an early exit for a genuine crash, so it needs three consecutive dead
-    # readings after the first minute before it is believed — a wrong reading here
+    # readings after the first minute before it is believed, a wrong reading here
     # would abort a perfectly healthy first-run download.
     if [ "${i}" -gt 12 ]; then
         if steam_alive; then
