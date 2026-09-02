@@ -58,6 +58,7 @@ jq \
   --argjson perPlayer "${MAX_ENTITIES_PER_PLAYER:-300}" \
   --argjson panelPort "${SERVER_PORT:-8778}" \
   --argjson rconPort  "${RCON_PORT:-27015}" \
+  --arg     panelIp   "${SERVER_IP:-}" \
   '.ServerName = $name
    | .Description = $description
    | .MaxPlayers = $players
@@ -76,6 +77,7 @@ jq \
    | .MaxEntitiesPerPlayer = $perPlayer
    | .DashboardHost = "+"
    | .DashboardPort = $panelPort
+   | .DashboardPublicHost = $panelIp
    | .DashboardUser = $panelUser
    | .DashboardPassword = $panelPass
    | .RconPort = $rconPort
@@ -189,6 +191,14 @@ if command -v unshare >/dev/null 2>&1 && ! unshare --user --map-root-user true >
     echo "  Ubuntu 24.04 and newer: also kernel.apparmor_restrict_unprivileged_userns=0"
     echo "  Every host: user.max_user_namespaces must be more than 0"
     echo "in /etc/sysctl.d/99-steam-userns.conf, then run sysctl --system."
+fi
+
+echo "Allocation: ip=${SERVER_IP:-<unset>} port=${SERVER_PORT:-<unset>} rcon=${RCON_PORT:-<unset>}"
+
+if [ -z "${SERVER_PORT}" ]; then
+    echo "SERVER_PORT is not set, so the panel falls back to 8778. Pterodactyl only"
+    echo "publishes ports it allocated, so give the server an allocation and the"
+    echo "panel will follow it."
 fi
 
 # ---- steam ----
