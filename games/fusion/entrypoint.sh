@@ -420,6 +420,12 @@ echo "--- end of Steam log ---"
 echo "Steam signs in on its own schedule, so the server now retries"
 echo "SteamAPI_Init every 5s for ten minutes. Updating on first run is normal."
 
+# Steam restarts itself after updating, so the minutes after this point are
+# where it either signs in or does not. Mirror its log while the server retries
+# rather than leaving that window blank. Stops on its own so the console does
+# not stay noisy for the life of the server.
+( timeout 720 tail -n 0 -F "${STEAM_CONSOLE}" 2>/dev/null | redact | sed -u "s/^/[steam] /" ) &
+
 # ---- run ----
 MODIFIED_STARTUP=$(echo -e ${STARTUP} | sed -e 's/{{/${/g' -e 's/}}/}/g')
 echo -e ":/home/container$ ${MODIFIED_STARTUP}"

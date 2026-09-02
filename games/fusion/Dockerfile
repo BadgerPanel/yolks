@@ -27,7 +27,10 @@ RUN         dpkg --add-architecture i386 \
                 ca-certificates curl wget jq tini xvfb xz-utils \
                 iproute2 net-tools tzdata locales procps file \
                 libgcc-s1 lib32gcc-s1 libc6 libc6:i386 libstdc++6 libstdc++6:i386 \
+                libgl1:i386 libdrm2:i386 \
                 libnss-wrapper gettext-base \
+            && test -e /usr/lib/i386-linux-gnu/libGL.so.1 \
+            && test -e /usr/lib/i386-linux-gnu/libdrm.so.2 \
             && apt-get clean \
             && rm -rf /var/lib/apt/lists/*
 
