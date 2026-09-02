@@ -432,11 +432,15 @@ steam_alive() {
 # No -login here. Steam ignores it, and leaving it off keeps the password out of
 # ps and out of Steam's own logs. The client signs in from the credentials
 # steamcmd cached and the AutoLoginUser written next to them.
+#
+# -no-cef-sandbox because Steam's sign-in runs inside steamwebhelper, which is
+# Chromium, whose sandbox needs the user namespaces this node refuses. Without
+# it steamwebhelper never starts, so nothing ever asks Steam to sign in.
 start_steam() {
     if command -v stdbuf >/dev/null 2>&1; then
-        stdbuf -oL -eL steam -no-browser -silent >>/home/container/steam.log 2>&1 &
+        stdbuf -oL -eL steam -no-cef-sandbox -no-browser -silent             >>/home/container/steam.log 2>&1 &
     else
-        steam -no-browser -silent >>/home/container/steam.log 2>&1 &
+        steam -no-cef-sandbox -no-browser -silent >>/home/container/steam.log 2>&1 &
     fi
 }
 
@@ -537,6 +541,17 @@ steam_snapshot() {
         echo "  ~/.steam/steam.pid holds $(cat /home/container/.steam/steam.pid 2>/dev/null)"
     else
         echo "  not written yet, so Steam has not signed in"
+    fi
+
+    # CEF wants far more shared memory than a container gets by default, and it
+    # is the other thing that stops steamwebhelper starting.
+    echo "Shared memory: $(df -h /dev/shm 2>/dev/null | awk 'NR==2 {print $2 " total, " $4 " free"}' || echo unknown)"
+    echo "Address space limit: $(ulimit -v 2>/dev/null || echo unknown)"
+
+    if pgrep -f steamwebhelper >/dev/null 2>&1; then
+        echo "steamwebhelper: running, so Steam has a UI to sign in with."
+    else
+        echo "steamwebhelper: NOT running, so nothing will ask Steam to sign in."
     fi
 
     echo "Steam processes:"
