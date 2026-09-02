@@ -94,6 +94,24 @@ if [ ! -e /tmp/.X11-unix/X99 ]; then
     exit 1
 fi
 
+# ---- user namespaces ----
+# Steam sandboxes itself with bubblewrap and refuses to start when the kernel
+# will not give it an unprivileged user namespace. Tested by asking for one,
+# because the sysctl that governs it differs between distributions. Steam's own
+# failure is a bwrap line buried in its log, which reads as a broken image
+# rather than a node setting, and that is an afternoon lost every time.
+# A missing unshare must not be read as a blocked namespace, or the check
+# stops a node that was fine.
+if command -v unshare >/dev/null 2>&1 && ! unshare --user --map-root-user true >/dev/null 2>&1; then
+    echo "Steam needs unprivileged user namespaces and this node does not allow them."
+    echo "Ask the node administrator to apply these settings:"
+    echo "  Debian: kernel.unprivileged_userns_clone=1"
+    echo "  Ubuntu 24.04 and newer: also kernel.apparmor_restrict_unprivileged_userns=0"
+    echo "  Every host: user.max_user_namespaces must be more than 0"
+    echo "Put them in /etc/sysctl.d/99-steam-userns.conf then run sysctl --system."
+    exit 1
+fi
+
 # ---- steam ----
 # SteamAPI.Init needs a signed-in client, so Steam must come up first.
 if [ -z "${STEAM_USER}" ] || [ -z "${STEAM_PASS}" ]; then
