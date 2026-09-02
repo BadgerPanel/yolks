@@ -319,13 +319,15 @@ steamcmd_login() {
     # steamcmd writes config.vdf but no loginusers.vdf, and that is the file the
     # client reads to decide which account may sign in without being asked. Build
     # it from the SteamID steamcmd recorded against the account.
-    _id=$(awk -v want="${STEAM_USER}" '
-        BEGIN { IGNORECASE = 1 }
-        $0 ~ "\"" want "\"" { found = 1 }
-        found && /SteamID/ {
-            if (match($0, /[0-9]{17}/)) { print substr($0, RSTART, RLENGTH); exit }
-        }
-    ' "${_cfg}/config.vdf" 2>/dev/null)
+    # Debian ships mawk, which has neither IGNORECASE nor {n} interval
+    # expressions, so an awk pattern for a 17 digit id silently never matched.
+    _id=$(grep -iA6 "\"${STEAM_USER}\"" "${_cfg}/config.vdf" 2>/dev/null           | grep -oE "7656[0-9]{13}" | head -1)
+
+    # The account block is the reliable place, but a lone id elsewhere in the
+    # file beats giving up when only one account has ever signed in here.
+    if [ -z "${_id}" ]; then
+        _id=$(grep -oE "7656119[0-9]{10}" "${_cfg}/config.vdf" 2>/dev/null | head -1)
+    fi
 
     # STEAM_ID is the override for when steamcmd records no id of its own.
     [ -n "${STEAM_ID}" ] && _id="${STEAM_ID}"
