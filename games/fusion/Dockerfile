@@ -49,6 +49,14 @@ RUN         curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steam.deb
             && rm -rf /var/lib/apt/lists/* \
             && command -v steam
 
+# Steam's Debian packaging runs steamdeps on first launch, which opens an xterm
+# and blocks on "Press return to continue". Nothing can answer that in a container,
+# so the client never starts. Dependencies are baked into this image, so the check
+# has nothing useful to do anyway.
+RUN         echo '#!/bin/sh' > /usr/bin/steamdeps \
+            && echo 'exit 0' >> /usr/bin/steamdeps \
+            && chmod +x /usr/bin/steamdeps
+
 ENV         NSS_WRAPPER_PASSWD=/tmp/passwd NSS_WRAPPER_GROUP=/etc/group
 
 RUN         useradd -m -d /home/container -s /bin/bash container

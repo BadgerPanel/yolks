@@ -155,8 +155,10 @@ steam_snapshot() {
         fi
     done
 
+    # steam -login puts the password on the command line, so it shows up in ps.
+    # Strip it before anything reaches the console.
     echo "Steam processes:"
-    ps -ef 2>/dev/null | grep "[s]team" | head -5
+    ps -ef 2>/dev/null | grep "[s]team"         | sed -e "s/-login [^ ]* [^ ]*/-login <redacted> <redacted>/g" | head -5
     echo "--- end diagnostic ---"
 }
 
