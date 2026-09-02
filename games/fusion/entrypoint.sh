@@ -131,6 +131,7 @@ echo "Waiting for Steam to finish bootstrapping (first run downloads its runtime
 
 STEAM_CLIENT=""
 DEAD=0
+LAST_REPORTED=""
 
 for i in $(seq 1 180); do
     if STEAM_CLIENT=$(find_steamclient); then
@@ -156,7 +157,22 @@ for i in $(seq 1 180); do
         fi
     fi
 
-    [ $((i % 6)) -eq 0 ] && echo "  still waiting... ($((i * 5))s)"
+    # A bare counter tells you nothing about whether Steam is working or stuck.
+    # Echo its latest output instead, and only when it changes.
+    if [ $((i % 6)) -eq 0 ]; then
+        LATEST=$(tail -1 /home/container/steam.log 2>/dev/null | tr -d '\r')
+
+        if [ "${LATEST}" != "${LAST_REPORTED}" ] && [ -n "${LATEST}" ]; then
+            echo "  ($((i * 5))s) ${LATEST}"
+            LAST_REPORTED="${LATEST}"
+        else
+            echo "  ($((i * 5))s) still waiting; steam.log has not moved"
+        fi
+
+        ls -la /home/container/.local/share/Steam/ 2>/dev/null | tail -n +2 | wc -l \
+            | xargs -I{} echo "        Steam directory holds {} entries"
+    fi
+
     sleep 5
 done
 
