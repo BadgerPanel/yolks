@@ -189,6 +189,28 @@ if [ -z "${STEAM_USER}" ] || [ -z "${STEAM_PASS}" ]; then
     exit 1
 fi
 
+# steam -login puts the password on its command line, so it turns up in ps, in
+# steam.log and in Steam's own console log. Strip the literal value out of
+# anything on its way to the panel console.
+redact() {
+    if command -v awk >/dev/null 2>&1; then
+        awk -v secret="${STEAM_PASS}" '
+            {
+                if (secret != "") {
+                    while ((at = index($0, secret)) > 0) {
+                        $0 = substr($0, 1, at - 1) "<redacted>" substr($0, at + length(secret))
+                    }
+                }
+                print
+            }
+        '
+    else
+        # Without awk there is no reliable way to strip it, so print nothing.
+        cat >/dev/null
+        echo "  (output suppressed: no awk to redact the Steam password)"
+    fi
+}
+
 # Steam's launcher runs as bin_steam.sh, then steam.sh, then the client itself.
 # Matching an exact process name misses all of those, so match the command line.
 steam_alive() {
@@ -251,11 +273,11 @@ steam_latest() {
     line=""
 
     if [ -s "${STEAM_CONSOLE}" ]; then
-        line=$(tail -1 "${STEAM_CONSOLE}" 2>/dev/null | tr -d '\r')
+        line=$(tail -1 "${STEAM_CONSOLE}" 2>/dev/null | tr -d '\r' | redact)
     fi
 
     if [ -z "${line}" ] && [ -s /home/container/steam.log ]; then
-        line=$(tail -1 /home/container/steam.log 2>/dev/null | tr -d '\r')
+        line=$(tail -1 /home/container/steam.log 2>/dev/null | tr -d '\r' | redact)
     fi
 
     printf '%s' "${line}"
@@ -284,7 +306,7 @@ steam_snapshot() {
     # steam -login puts the password on the command line, so it shows in ps.
     # Strip it before anything reaches the console.
     echo "Steam processes:"
-    ps -ef 2>/dev/null | grep "[s]team" | sed -e "s/-login [^ ]* [^ ]*/-login <redacted> <redacted>/g" | head -5
+    ps -ef 2>/dev/null | grep "[s]team" | redact | head -5
     echo "--- end diagnostic ---"
 }
 
@@ -324,9 +346,9 @@ for i in $(seq 1 180); do
 
         if [ "${DEAD}" -ge 3 ]; then
             echo "Steam exited while starting up. Last lines of its console log:"
-            tail -40 "${STEAM_CONSOLE}" 2>/dev/null
+            tail -40 "${STEAM_CONSOLE}" 2>/dev/null | redact
             echo "--- launcher output ---"
-            tail -20 /home/container/steam.log 2>/dev/null
+            tail -20 /home/container/steam.log 2>/dev/null | redact
             exit 1
         fi
     fi
@@ -353,9 +375,9 @@ done
 if [ -z "${STEAM_CLIENT}" ]; then
     echo "Steam did not finish bootstrapping in fifteen minutes."
     echo "--- Steam console log ---"
-    tail -60 "${STEAM_CONSOLE}" 2>/dev/null || echo "  (no console log written)"
+    tail -60 "${STEAM_CONSOLE}" 2>/dev/null | redact || echo "  (no console log written)"
     echo "--- launcher output ---"
-    tail -20 /home/container/steam.log 2>/dev/null
+    tail -20 /home/container/steam.log 2>/dev/null | redact
     echo "--- what exists ---"
     ls -la /home/container/.local/share/Steam/ 2>/dev/null | head -20
     exit 1
