@@ -29,9 +29,13 @@ RUN         dpkg --add-architecture i386 \
                 libgcc-s1 lib32gcc-s1 libc6 libc6:i386 libstdc++6 libstdc++6:i386 \
                 libgl1:i386 libdrm2:i386 \
                 dbus-x11 \
+                x11vnc novnc websockify \
                 libnss-wrapper gettext-base \
             && test -e /usr/lib/i386-linux-gnu/libGL.so.1 \
             && command -v dbus-launch \
+            && command -v x11vnc \
+            && command -v websockify \
+            && test -d /usr/share/novnc \
             && test -e /usr/lib/i386-linux-gnu/libdrm.so.2 \
             && apt-get clean \
             && rm -rf /var/lib/apt/lists/*

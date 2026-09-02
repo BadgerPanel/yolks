@@ -201,6 +201,31 @@ if [ -z "${SERVER_PORT}" ]; then
     echo "panel will follow it."
 fi
 
+# ---- steam login through a browser ----
+# SteamMatchmaking.CreateLobby is a user API, so this needs a signed-in account
+# rather than a game server token. Steam's own login runs in its UI, which has no
+# command-line route any more, so show that UI over the display it already draws
+# on and let a person sign in once. The volume keeps the session afterwards.
+start_login_ui() {
+    [ -n "${VNC_PASSWORD}" ] || {
+        echo "STEAM_LOGIN_UI is on but VNC_PASSWORD is empty, so the login screen"
+        echo "would be open to anyone. Set a password and restart."
+        return 1
+    }
+
+    mkdir -p /home/container/.vnc
+    x11vnc -storepasswd "${VNC_PASSWORD}" /home/container/.vnc/passwd >/dev/null 2>&1
+
+    x11vnc -display "${DISPLAY}" -rfbauth /home/container/.vnc/passwd         -localhost -rfbport 5900 -forever -shared -noxdamage -quiet         >>/home/container/vnc.log 2>&1 &
+
+    websockify --web=/usr/share/novnc "0.0.0.0:${VNC_PORT:-8080}" 127.0.0.1:5900         >>/home/container/vnc.log 2>&1 &
+
+    echo "Steam login screen: http://${SERVER_IP}:${VNC_PORT:-8080}/vnc.html"
+    echo "Sign in there once. Steam keeps the session in this server's files, so"
+    echo "turn STEAM_LOGIN_UI off again afterwards to close the screen."
+    return 0
+}
+
 # ---- steam ----
 # SteamAPI.Init needs a signed-in client, so Steam must come up first.
 if [ -z "${STEAM_USER}" ] || [ -z "${STEAM_PASS}" ]; then
@@ -264,8 +289,12 @@ stop_steam() {
     sleep 3
 }
 
+if [ "$(as_bool "${STEAM_LOGIN_UI}" false)" = "true" ]; then
+    start_login_ui || true
+fi
+
 if ! steam_alive; then
-    echo "Signing in to Steam as ${STEAM_USER}..."
+    echo "Starting Steam as ${STEAM_USER}..."
     start_steam
 fi
 
