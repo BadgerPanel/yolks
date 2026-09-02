@@ -261,16 +261,6 @@ find_steamclient() {
 
 echo "Waiting for Steam to finish bootstrapping (first run downloads its runtime)..."
 
-# SteamAPI_IsSteamRunning reads ~/.steam/steam.pid and checks that process is
-# alive, so that file is what "logged in and serving" actually looks like.
-# steamclient.so ships in the bootstrap and appears minutes earlier.
-steam_pid_alive() {
-    [ -f /home/container/.steam/steam.pid ] || return 1
-    pid=$(cat /home/container/.steam/steam.pid 2>/dev/null)
-    [ -n "${pid}" ] || return 1
-    kill -0 "${pid}" 2>/dev/null
-}
-
 STEAM_CLIENT=""
 DEAD=0
 RETRIED=0
@@ -345,9 +335,8 @@ for i in $(seq 1 180); do
         continue
     fi
 
-    if STEAM_CLIENT=$(find_steamclient) && steam_pid_alive; then
-        echo "Steam is ready: ${STEAM_CLIENT}"
-        echo "Steam signed in after $((i * 5))s."
+    if STEAM_CLIENT=$(find_steamclient); then
+        echo "Steam has unpacked: ${STEAM_CLIENT}"
         break
     fi
 
@@ -390,13 +379,6 @@ for i in $(seq 1 180); do
     sleep 5
 done
 
-if [ -n "${STEAM_CLIENT}" ] && ! steam_pid_alive; then
-    echo "Steam unpacked but never signed in within fifteen minutes."
-    echo "Starting anyway; the server retries for another ten minutes."
-    echo "If it never connects, check the account for Steam Guard:"
-    grep -iE "steam guard|two.factor|login fail|invalid password|logon deni"         "${STEAM_CONSOLE}" 2>/dev/null | redact | tail -10         || echo "  (nothing in the console log about login)"
-fi
-
 if [ -z "${STEAM_CLIENT}" ]; then
     echo "Steam did not finish bootstrapping in fifteen minutes."
     echo "--- Steam console log ---"
@@ -413,6 +395,12 @@ mkdir -p /home/container/.steam/sdk64
 cp -f "${STEAM_CLIENT}" /home/container/.steam/sdk64/steamclient.so 2>/dev/null || true
 
 sleep 10
+
+echo "--- Steam's own log, at the moment the server starts ---"
+tail -60 "${STEAM_CONSOLE}" 2>/dev/null | redact || echo "  (no console log written)"
+echo "--- end of Steam log ---"
+echo "Steam signs in on its own schedule, so the server now retries"
+echo "SteamAPI_Init every 5s for ten minutes. Updating on first run is normal."
 
 # ---- run ----
 MODIFIED_STARTUP=$(echo -e ${STARTUP} | sed -e 's/{{/${/g' -e 's/}}/}/g')
