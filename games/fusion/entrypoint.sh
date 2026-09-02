@@ -5,6 +5,11 @@ INTERNAL_IP=$(ip route get 1 | awk '{print $(NF-2);exit}')
 export INTERNAL_IP
 
 export DISPLAY=:99
+
+# steam.sh returns early from show_message under gamescope instead of opening a
+# dialog and waiting on it. Without this, a failed requirement check leaves Steam
+# blocked on "Press enter to continue" forever rather than exiting.
+export XDG_CURRENT_DESKTOP=gamescope
 export LD_LIBRARY_PATH=/home/container:${LD_LIBRARY_PATH}
 
 # Wings reuses a cached image when the tag has not changed under it, so a run can
@@ -332,43 +337,33 @@ steam_snapshot() {
 for i in $(seq 1 180); do
     [ "${i}" -eq 6 ] && steam_snapshot
 
-    # On a fresh volume the check binary only exists once Steam has unpacked the
-    # runtime, which is after we first looked. Catch it here and restart Steam,
-    # because by now it has either failed the check or is stuck showing the error.
-    if [ "${RETRIED}" -eq 0 ] && disarm_requirement_checks >/dev/null 2>&1; then
-        echo "Neutralised Steam's user-namespace check; restarting Steam."
-        RETRIED=1
-        DEAD=0
-
-        stop_steam
-        start_steam
-
-        sleep 5
-        continue
+    # steam.sh replaces the whole runtime directory whenever the archive checksum
+    # changes, which a self-update guarantees, so one disarm cannot survive. Put
+    # the no-op back every time a fresh binary appears.
+    if disarm_requirement_checks >/dev/null 2>&1; then
+        echo "Replaced Steam's namespace check again after a runtime update."
+        RETRIED=$((RETRIED + 1))
     fi
 
-    if STEAM_CLIENT=$(find_steamclient) && ! steam_updating; then
+    if STEAM_CLIENT=$(find_steamclient) && ! steam_updating && steam_alive; then
         echo "Steam settled after $((i * 5))s: ${STEAM_CLIENT}"
         break
     fi
 
-    # The client library appearing is what actually matters. Process detection is
-    # only an early exit for a genuine crash, so it needs three consecutive dead
-    # readings after the first minute before it is believed, a wrong reading here
-    # would abort a perfectly healthy first-run download.
-    if [ "${i}" -gt 12 ]; then
-        if steam_alive; then
-            DEAD=0
-        else
-            DEAD=$((DEAD + 1))
-        fi
+    # Steam exits 71 when the namespace check refuses the node. That happens
+    # after a runtime update has overwritten the no-op, so restarting it once the
+    # runtime has stopped changing is what gets it through, rather than giving up.
+    if steam_alive; then
+        DEAD=0
+    else
+        DEAD=$((DEAD + 1))
 
-        if [ "${DEAD}" -ge 3 ]; then
-            echo "Steam exited while starting up. Last lines of its console log:"
-            tail -40 "${STEAM_CONSOLE}" 2>/dev/null | redact
-            echo "--- launcher output ---"
-            tail -20 /home/container/steam.log 2>/dev/null | redact
-            exit 1
+        if [ "${DEAD}" -ge 2 ]; then
+            echo "Steam is not running; restarting it with the check disarmed."
+            disarm_requirement_checks >/dev/null 2>&1
+            stop_steam
+            start_steam
+            DEAD=0
         fi
     fi
 
