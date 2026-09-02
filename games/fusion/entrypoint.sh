@@ -266,6 +266,13 @@ find_steamclient() {
 
 echo "Waiting for Steam to finish bootstrapping (first run downloads its runtime)..."
 
+# Steam forks a -child-update-ui process to apply its own update, and that is
+# the process burning 99% CPU on every start so far. It exits when the update
+# finishes, so its absence is the signal that Steam has settled.
+steam_updating() {
+    ps -ef 2>/dev/null | grep -q "[-]child-update-ui"
+}
+
 STEAM_CLIENT=""
 DEAD=0
 RETRIED=0
@@ -340,8 +347,8 @@ for i in $(seq 1 180); do
         continue
     fi
 
-    if STEAM_CLIENT=$(find_steamclient); then
-        echo "Steam has unpacked: ${STEAM_CLIENT}"
+    if STEAM_CLIENT=$(find_steamclient) && ! steam_updating; then
+        echo "Steam settled after $((i * 5))s: ${STEAM_CLIENT}"
         break
     fi
 
@@ -377,8 +384,9 @@ for i in $(seq 1 180); do
             echo "  ($((i * 5))s) still waiting; Steam has written nothing new"
         fi
 
-        ls -la /home/container/.local/share/Steam/ 2>/dev/null | tail -n +2 | wc -l \
-            | xargs -I{} echo "        Steam directory holds {} entries"
+        if steam_updating; then
+            echo "        still applying Steam's own update"
+        fi
     fi
 
     sleep 5
@@ -400,6 +408,11 @@ mkdir -p /home/container/.steam/sdk64
 cp -f "${STEAM_CLIENT}" /home/container/.steam/sdk64/steamclient.so 2>/dev/null || true
 
 sleep 10
+
+if steam_updating; then
+    echo "Steam is still updating after fifteen minutes. Starting anyway,"
+    echo "since the server retries SteamAPI_Init for another ten."
+fi
 
 echo "--- Steam's own log, at the moment the server starts ---"
 tail -60 "${STEAM_CONSOLE}" 2>/dev/null | redact || echo "  (no console log written)"
