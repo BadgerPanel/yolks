@@ -244,25 +244,52 @@ steamcmd_login() {
     rm -rf /home/container/.steamcmd-home
     mkdir -p /home/container/.steamcmd-home
 
-    HOME=/home/container/.steamcmd-home timeout 300 /opt/steamcmd/steamcmd.sh         +@ShutdownOnFailedCommand 1         +login "${STEAM_USER}" "${STEAM_PASS}" ${STEAM_GUARD_CODE}         +quit 2>&1 | redact | sed -u "s/^/[steamcmd] /"
+    _out=/home/container/steamcmd-login.log
+    : > "${_out}"
+
+    # stdin from /dev/null so a Steam Guard prompt fails fast instead of blocking
+    # for the whole timeout, and the status is kept rather than lost down a pipe.
+    HOME=/home/container/.steamcmd-home timeout 300 /opt/steamcmd/steamcmd.sh \
+        +@ShutdownOnFailedCommand 1 \
+        +login "${STEAM_USER}" "${STEAM_PASS}" ${STEAM_GUARD_CODE} \
+        +quit </dev/null >"${_out}" 2>&1
+    _rc=$?
+
+    redact < "${_out}" | sed -u "s/^/[steamcmd] /" | tail -40
+    echo "[steamcmd] exit status ${_rc}"
+
+    if grep -qi "Steam Guard\|two.factor\|Two-factor" "${_out}" 2>/dev/null; then
+        echo "steamcmd wants a Steam Guard code. Put a fresh one in STEAM_GUARD_CODE"
+        echo "and start the server straight away, because they expire in minutes."
+        return 1
+    fi
+
+    if grep -qi "Invalid Password\|password is incorrect\|Login Failure" "${_out}" 2>/dev/null; then
+        echo "steamcmd says the account name or password is wrong."
+        return 1
+    fi
 
     _cfg=/home/container/.steamcmd-home/Steam/config
 
-    if [ ! -f "${_cfg}/config.vdf" ]; then
-        echo "steamcmd did not write a credential file, so the sign-in failed."
-        echo "If it asked for a Steam Guard code above, put one in STEAM_GUARD_CODE"
-        echo "and restart. Codes expire quickly, so use a fresh one."
+    echo "[steamcmd] files written:"
+    ls -la "${_cfg}" 2>/dev/null | tail -n +2 || echo "  no config directory at all"
+
+    if [ "${_rc}" -ne 0 ] || [ ! -f "${_cfg}/config.vdf" ]; then
+        echo "steamcmd did not sign in, so the client has no credentials to reuse."
         return 1
     fi
 
     mkdir -p "${STEAM_CONFIG_DIR}"
 
     for f in config.vdf loginusers.vdf; do
-        [ -f "${_cfg}/${f}" ] && cp -f "${_cfg}/${f}" "${STEAM_CONFIG_DIR}/${f}"
+        if [ -f "${_cfg}/${f}" ]; then
+            cp -f "${_cfg}/${f}" "${STEAM_CONFIG_DIR}/${f}"
+            echo "[steamcmd] handed ${f} to the client."
+        fi
     done
 
     write_autologin
-    echo "steamcmd signed in and the credentials were handed to the client."
+    echo "steamcmd signed in as ${STEAM_USER}."
     return 0
 }
 
