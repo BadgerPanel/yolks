@@ -327,9 +327,13 @@ steamcmd_login() {
         }
     ' "${_cfg}/config.vdf" 2>/dev/null)
 
+    # STEAM_ID is the override for when steamcmd records no id of its own.
+    [ -n "${STEAM_ID}" ] && _id="${STEAM_ID}"
+
     if [ -z "${_id}" ]; then
-        echo "steamcmd signed in but recorded no SteamID for ${STEAM_USER},"
-        echo "so the client has nothing to sign in with."
+        echo "steamcmd signed in but recorded no SteamID for ${STEAM_USER}."
+        echo "Put the account's SteamID in STEAM_ID and restart. What it wrote:"
+        grep -oE "\"(Accounts|SteamID|[0-9]{17})\"|\"${STEAM_USER}\""             "${_cfg}/config.vdf" 2>/dev/null | sort -u | sed "s/^/  /"             || echo "  no account section at all"
         return 1
     fi
 
