@@ -46,6 +46,7 @@ RUN         dpkg --add-architecture i386 \
 RUN         mkdir -p /opt/steamcmd \
             && curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
                 | tar xz -C /opt/steamcmd \
+            && chmod -R a+rX /opt/steamcmd \
             && test -x /opt/steamcmd/steamcmd.sh
 
 # Runtime only; the server is published framework-dependent.

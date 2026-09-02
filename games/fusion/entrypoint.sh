@@ -244,12 +244,25 @@ steamcmd_login() {
     rm -rf /home/container/.steamcmd-home
     mkdir -p /home/container/.steamcmd-home
 
+    # steamcmd updates itself in place, so it needs a copy it owns rather than the
+    # root-owned one in /opt that the container user cannot write to or execute.
+    _sc=/home/container/.steamcmd-home/steamcmd
+    mkdir -p "${_sc}"
+    cp -r /opt/steamcmd/. "${_sc}/" 2>/dev/null
+    chmod -R u+rwX "${_sc}" 2>/dev/null
+    chmod u+x "${_sc}/steamcmd.sh" 2>/dev/null
+
+    if [ ! -x "${_sc}/steamcmd.sh" ]; then
+        echo "steamcmd could not be made runnable at ${_sc}/steamcmd.sh."
+        return 1
+    fi
+
     _out=/home/container/steamcmd-login.log
     : > "${_out}"
 
     # stdin from /dev/null so a Steam Guard prompt fails fast instead of blocking
     # for the whole timeout, and the status is kept rather than lost down a pipe.
-    HOME=/home/container/.steamcmd-home timeout 300 /opt/steamcmd/steamcmd.sh \
+    HOME=/home/container/.steamcmd-home timeout 300 "${_sc}/steamcmd.sh" \
         +@ShutdownOnFailedCommand 1 \
         +login "${STEAM_USER}" "${STEAM_PASS}" ${STEAM_GUARD_CODE} \
         +quit </dev/null >"${_out}" 2>&1
@@ -270,6 +283,7 @@ steamcmd_login() {
     fi
 
     _cfg=/home/container/.steamcmd-home/Steam/config
+    [ -d "${_cfg}" ] || _cfg="${_sc}/config"
 
     echo "[steamcmd] files written:"
     ls -la "${_cfg}" 2>/dev/null | tail -n +2 || echo "  no config directory at all"
