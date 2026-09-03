@@ -199,6 +199,20 @@ if command -v unshare >/dev/null 2>&1 && ! unshare --user --map-root-user true >
     echo "  Every host: user.max_user_namespaces must be more than 0"
     echo "in /etc/sysctl.d/99-steam-userns.conf, then run sysctl --system."
     echo "Reference: https://github.com/ValveSoftware/steam-runtime/issues/297"
+
+    # Which sysctl is doing the blocking decides whether anything else is even
+    # possible. A setuid bwrap can still make a namespace when only unprivileged
+    # processes are barred. Nothing can when the maximum is zero.
+    _maxns=$(cat /proc/sys/user/max_user_namespaces 2>/dev/null || echo "?")
+    _unpriv=$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || echo "not present")
+
+    echo "  user.max_user_namespaces = ${_maxns}"
+    echo "  kernel.unprivileged_userns_clone = ${_unpriv}"
+
+    if [ "${_maxns}" = "0" ]; then
+        echo "  A maximum of zero blocks namespaces outright. No setuid helper and no"
+        echo "  container setting can get round that; it has to be raised on the host."
+    fi
 fi
 
 echo "Allocation: ip=${SERVER_IP:-<unset>} port=${SERVER_PORT:-<unset>} rcon=${RCON_PORT:-<unset>}"
