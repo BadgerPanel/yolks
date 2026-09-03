@@ -543,17 +543,6 @@ steam_snapshot() {
         echo "  not written yet, so Steam has not signed in"
     fi
 
-    # CEF wants far more shared memory than a container gets by default, and it
-    # is the other thing that stops steamwebhelper starting.
-    echo "Shared memory: $(df -h /dev/shm 2>/dev/null | awk 'NR==2 {print $2 " total, " $4 " free"}' || echo unknown)"
-    echo "Address space limit: $(ulimit -v 2>/dev/null || echo unknown)"
-
-    if pgrep -f steamwebhelper >/dev/null 2>&1; then
-        echo "steamwebhelper: running, so Steam has a UI to sign in with."
-    else
-        echo "steamwebhelper: NOT running, so nothing will ask Steam to sign in."
-    fi
-
     echo "Steam processes:"
     ps -ef 2>/dev/null | grep "[s]team" | redact | head -5
     echo "--- end diagnostic ---"
@@ -630,9 +619,23 @@ cp -f "${STEAM_CLIENT}" /home/container/.steam/sdk64/steamclient.so 2>/dev/null 
 sleep 10
 
 if steam_updating; then
-    echo "Steam is still updating after fifteen minutes. Starting anyway,"
-    echo "since the server retries SteamAPI_Init for another ten."
+    echo "Steam is updating itself. Starting anyway, since the server retries"
+    echo "SteamAPI_Init for ten minutes and the watchdog restarts Steam after."
 fi
+
+echo "--- can Steam sign in? ---"
+echo "Shared memory: $(df -h /dev/shm 2>/dev/null | awk 'NR==2 {print $2 " total, " $4 " free"}' || echo unknown)"
+echo "Address space limit: $(ulimit -v 2>/dev/null || echo unknown)"
+echo "Open file limit: $(ulimit -n 2>/dev/null || echo unknown)"
+
+if pgrep -f steamwebhelper >/dev/null 2>&1; then
+    echo "steamwebhelper: running, so Steam has the UI it signs in through."
+else
+    echo "steamwebhelper: NOT running. Steam's sign-in lives in it, so the client"
+    echo "  stays anonymous and no lobby can be created. Its own words:"
+    grep -iE "webhelper|cef|sandbox|shared memory|mmap" "${STEAM_CONSOLE}" 2>/dev/null         | redact | tail -12 | sed "s/^/    /" || echo "    (nothing logged about it)"
+fi
+echo "--- end ---"
 
 echo "--- Steam's own log, at the moment the server starts ---"
 tail -60 "${STEAM_CONSOLE}" 2>/dev/null | redact || echo "  (no console log written)"
