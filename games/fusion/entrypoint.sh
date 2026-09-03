@@ -453,6 +453,8 @@ stop_steam() {
     sleep 3
 }
 
+repair_webhelper     && echo "Put Steam's own steamwebhelper back; an earlier build had replaced it."
+
 if already_signed_in; then
     echo "Steam already has credentials for ${STEAM_USER}."
     write_autologin
@@ -484,6 +486,28 @@ find_steamclient() {
 }
 
 echo "Waiting for Steam to finish bootstrapping (first run downloads its runtime)..."
+
+# An earlier build replaced steamwebhelper with a wrapper script to keep CEF off
+# /dev/shm. Steam verifies its own checksums, so it fought back, and the pair of
+# them crash looped. Undo that wherever a volume still carries it.
+repair_webhelper() {
+    _fixed=0
+
+    for helper in "${STEAM_ROOT}"/ubuntu12_64/steamwebhelper                   "${STEAM_ROOT}"/ubuntu12_32/steamwebhelper
+    do
+        [ -e "${helper}.real" ] || continue
+
+        # Put the real binary back only if a script is standing in its place.
+        if [ -f "${helper}" ] && head -c 2 "${helper}" 2>/dev/null | grep -q "#!"; then
+            mv -f "${helper}.real" "${helper}" 2>/dev/null && _fixed=$((_fixed + 1))
+        else
+            rm -f "${helper}.real" 2>/dev/null
+        fi
+    done
+
+    [ "${_fixed}" -gt 0 ] && return 0
+    return 1
+}
 
 # Steam forks a -child-update-ui process to apply its own update, and that is
 # the process burning 99% CPU on every start so far. It exits when the update
