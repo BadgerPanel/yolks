@@ -453,8 +453,6 @@ stop_steam() {
     sleep 3
 }
 
-wrap_webhelper >/dev/null 2>&1     && echo "Wrapped steamwebhelper so CEF does not need the container's small /dev/shm."
-
 if already_signed_in; then
     echo "Steam already has credentials for ${STEAM_USER}."
     write_autologin
@@ -486,42 +484,6 @@ find_steamclient() {
 }
 
 echo "Waiting for Steam to finish bootstrapping (first run downloads its runtime)..."
-
-# A container gets 64M of /dev/shm whatever its memory limit, and Chromium wants
-# a great deal more, so steamwebhelper dies on mmap and Steam never gets the UI
-# it signs in through. --disable-dev-shm-usage sends that shared memory to a temp
-# directory instead. Steam gives no way to pass CEF a flag, so wrap the binary it
-# launches. A client update replaces it, hence the re-check.
-wrap_webhelper() {
-    _found=0
-    _changed=0
-
-    for helper in "${STEAM_ROOT}"/ubuntu12_64/steamwebhelper                   "${STEAM_ROOT}"/ubuntu12_32/steamwebhelper
-    do
-        [ -f "${helper}" ] || continue
-        _found=$((_found + 1))
-
-        # Ours is a shell script sitting next to the real binary.
-        if [ -f "${helper}.real" ] && head -c 2 "${helper}" 2>/dev/null | grep -q "#!"; then
-            continue
-        fi
-
-        mv -f "${helper}" "${helper}.real" 2>/dev/null || continue
-
-        {
-            echo "#!/bin/sh"
-            echo "# fusion-dedicated: keep CEF off the container's 64M /dev/shm."
-            echo "exec \"${helper}.real\" --disable-dev-shm-usage \"\$@\""
-        } > "${helper}" 2>/dev/null || continue
-
-        chmod +x "${helper}" 2>/dev/null || continue
-        _changed=$((_changed + 1))
-    done
-
-    [ "${_found}" -eq 0 ] && return 1
-    [ "${_changed}" -gt 0 ] && return 0
-    return 1
-}
 
 # Steam forks a -child-update-ui process to apply its own update, and that is
 # the process burning 99% CPU on every start so far. It exits when the update
@@ -670,7 +632,20 @@ if pgrep -f steamwebhelper >/dev/null 2>&1; then
     echo "steamwebhelper: running, so Steam has the UI it signs in through."
 else
     echo "steamwebhelper: NOT running. Steam's sign-in lives in it, so the client"
-    echo "  stays anonymous and no lobby can be created. Its own words:"
+    echo "  stays anonymous and no lobby can be created."
+
+    _shm_kb=$(df -k /dev/shm 2>/dev/null | awk "NR==2 {print \$2}")
+
+    if [ -n "${_shm_kb}" ] && [ "${_shm_kb}" -lt 262144 ]; then
+        echo "  /dev/shm is only $((_shm_kb / 1024))M. Steam's interface is Chromium and"
+        echo "  needs far more, which is why it dies on mmap. This is Docker's default"
+        echo "  and nothing inside the container can change it. On the node, put"
+        echo "  {\"default-shm-size\": \"1G\"} in /etc/docker/daemon.json and restart"
+        echo "  Docker, or set ShmSize on the container. Steam verifies its own files,"
+        echo "  so patching its binary is not an option: it reinstalls them."
+    fi
+
+    echo "  Its own words:"
     grep -iE "webhelper|cef|sandbox|shared memory|mmap" "${STEAM_CONSOLE}" 2>/dev/null         | redact | tail -12 | sed "s/^/    /" || echo "    (nothing logged about it)"
 fi
 echo "--- end ---"
@@ -744,15 +719,6 @@ echo "SteamAPI_Init every 5s for ten minutes. Updating on first run is normal."
                 grep -iE "webhelper|cef|sandbox|shared memory|mmap" "${STEAM_CONSOLE}"                     2>/dev/null | redact | tail -4 | sed "s/^/    /"                     || echo "    (nothing logged)"
             fi
             _helper_seen=0
-        fi
-
-        # steamwebhelper only exists once the client update has landed, so this
-        # is usually the first chance to wrap it.
-        if wrap_webhelper >/dev/null 2>&1; then
-            echo "[steam] wrapped steamwebhelper to keep CEF off /dev/shm; restarting Steam."
-            stop_steam
-            start_steam
-            sleep 25
         fi
 
         if ! steam_alive; then
