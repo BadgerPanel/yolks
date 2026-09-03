@@ -180,17 +180,25 @@ fi
 # Tested by asking the kernel for a namespace rather than reading a sysctl,
 # because the governing setting differs between distributions. A missing unshare
 # must not be read as a blocked namespace, or this stops a node that was fine.
-# Informational rather than fatal: the requirement check above is disabled, so
-# Steam starts either way. A node that allows namespaces lets Steam keep its own
-# sandbox, which is worth having, so the settings are still worth naming.
+#
+# This is a hard requirement, not a nicety. Steam runs steamwebhelper, which is
+# its whole interface and the only place it can sign in, inside the sniper
+# runtime. pressure-vessel launches that with bwrap, and bwrap needs a user
+# namespace. Without one steamwebhelper never starts, so the client never signs
+# in, so no lobby can be created and the server stays invisible. Disabling the
+# requirement check above only stops Steam refusing to start; it cannot remove
+# the requirement itself.
 if command -v unshare >/dev/null 2>&1 && ! unshare --user --map-root-user true >/dev/null 2>&1; then
-    echo "Note: this node blocks unprivileged user namespaces, so Steam runs without"
-    echo "its bubblewrap sandbox. The container is the boundary instead, and the"
-    echo "server works. To give Steam its sandbox back, the node administrator can set:"
+    echo "This node blocks unprivileged user namespaces, and Steam cannot sign in"
+    echo "without them. Its interface runs in the sniper runtime, which pressure-vessel"
+    echo "starts with bwrap, and bwrap needs a namespace. No interface means no"
+    echo "sign-in, which means no lobby and a server nobody can see."
+    echo "The node administrator needs to set:"
     echo "  Debian: kernel.unprivileged_userns_clone=1"
     echo "  Ubuntu 24.04 and newer: also kernel.apparmor_restrict_unprivileged_userns=0"
     echo "  Every host: user.max_user_namespaces must be more than 0"
     echo "in /etc/sysctl.d/99-steam-userns.conf, then run sysctl --system."
+    echo "Reference: https://github.com/ValveSoftware/steam-runtime/issues/297"
 fi
 
 echo "Allocation: ip=${SERVER_IP:-<unset>} port=${SERVER_PORT:-<unset>} rcon=${RCON_PORT:-<unset>}"
@@ -662,12 +670,15 @@ else
     _shm_kb=$(df -k /dev/shm 2>/dev/null | awk "NR==2 {print \$2}")
 
     if [ -n "${_shm_kb}" ] && [ "${_shm_kb}" -lt 262144 ]; then
-        echo "  /dev/shm is only $((_shm_kb / 1024))M. Steam's interface is Chromium and"
-        echo "  needs far more, which is why it dies on mmap. Nothing inside the"
-        echo "  container can raise it, and Steam verifies its own files, so patching"
-        echo "  its binary does not work either: it reinstalls them."
-        echo "  The panel sets this per container, sized from the server's memory."
-        echo "  A node still showing 64M is running a daemon from before that landed."
+        echo "  /dev/shm is only $((_shm_kb / 1024))M, which is worth raising, though it is"
+        echo "  not what stops steamwebhelper on a node without user namespaces."
+    fi
+
+    if command -v unshare >/dev/null 2>&1         && ! unshare --user --map-root-user true >/dev/null 2>&1; then
+        echo "  This node blocks user namespaces. steamwebhelper runs in the sniper"
+        echo "  runtime, which pressure-vessel starts with bwrap, and bwrap cannot"
+        echo "  make a namespace here. That is why it never starts. Nothing in this"
+        echo "  container can work around it; the sysctl above is the fix."
     fi
 
     echo "  Its own words:"
