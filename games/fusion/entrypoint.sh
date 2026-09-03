@@ -320,12 +320,11 @@ if command -v unshare >/dev/null 2>&1 && ! unshare --user --map-root-user true >
     else
         echo ""
         echo "The host allows namespaces, so it is this container refusing. Docker's"
-        echo "default seccomp profile blocks CLONE_NEWUSER and its AppArmor profile"
-        echo "denies namespace calls, both regardless of the sysctls above. The"
-        echo "container needs:"
-        echo "  SecurityOpt: seccomp=unconfined, apparmor=unconfined"
-        echo "This is what every working headless Steam container sets. Nothing"
-        echo "inside the container can lift it."
+        echo "default seccomp profile blocks CLONE_NEWUSER whatever the sysctls say."
+        echo "The container needs:"
+        echo "  SecurityOpt: seccomp=unconfined"
+        echo "AppArmor can stay as it is; seccomp alone is what blocks this."
+        echo "Nothing inside the container can lift it."
     fi
 
     echo "Reference: https://github.com/ValveSoftware/steam-runtime/issues/297"
