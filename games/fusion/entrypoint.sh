@@ -721,9 +721,29 @@ echo "SteamAPI_Init every 5s for ten minutes. Updating on first run is normal."
 # so keep putting the no-op back and restart the client when it dies, rather than
 # only doing it while waiting.
 (
+    _helper_seen=0
+    _ticks=0
+
     while true; do
+        _ticks=$((_ticks + 1))
+
         if disarm_requirement_checks >/dev/null 2>&1; then
             echo "[steam] put the namespace check back to a no-op after an update."
+        fi
+
+        # Whether steamwebhelper comes up is the whole question, so say when it
+        # does, and every couple of minutes say why it has not.
+        if pgrep -f steamwebhelper >/dev/null 2>&1; then
+            if [ "${_helper_seen}" -eq 0 ]; then
+                echo "[steam] steamwebhelper is running. Steam has its sign-in UI now."
+                _helper_seen=1
+            fi
+        else
+            if [ "${_helper_seen}" -eq 1 ] || [ $((_ticks % 24)) -eq 0 ]; then
+                echo "[steam] steamwebhelper is not running. Last it said:"
+                grep -iE "webhelper|cef|sandbox|shared memory|mmap" "${STEAM_CONSOLE}"                     2>/dev/null | redact | tail -4 | sed "s/^/    /"                     || echo "    (nothing logged)"
+            fi
+            _helper_seen=0
         fi
 
         # steamwebhelper only exists once the client update has landed, so this
