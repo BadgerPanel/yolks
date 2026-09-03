@@ -117,7 +117,18 @@ STEAM_BOOTSTRAP=/usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz
 # Globs rather than find: a missing find would fail silently and this has to work.
 # Both known runtime layouts are covered, and a non-matching glob stays literal,
 # which the -f test discards.
+# Steam's check exists because it is telling the truth: steamwebhelper runs in
+# the sniper runtime, pressure-vessel starts it with bwrap, and bwrap needs a
+# user namespace. Silence it only where it cannot pass, so that on a host which
+# allows namespaces Steam keeps its own sandbox and its own honest reporting.
+namespaces_work() {
+    command -v unshare >/dev/null 2>&1 || return 1
+    unshare --user --map-root-user true >/dev/null 2>&1
+}
+
 disarm_requirement_checks() {
+    namespaces_work && return 1
+
     _found=0
     _changed=0
 
@@ -169,7 +180,9 @@ fi
 if disarm_requirement_checks; then
     echo "Replaced Steam's user-namespace check with a no-op."
 else
-    if [ -x "${STEAM_ROOT}/steam.sh" ]; then
+    if namespaces_work; then
+        echo "User namespaces work here, so Steam keeps its own requirement check."
+    elif [ -x "${STEAM_ROOT}/steam.sh" ]; then
         echo "Steam's user-namespace check is already a no-op."
     else
         echo "Steam's runtime is not unpacked yet; the check will be replaced once it appears."
