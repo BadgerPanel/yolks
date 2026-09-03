@@ -662,11 +662,11 @@ else
 
     if [ -n "${_shm_kb}" ] && [ "${_shm_kb}" -lt 262144 ]; then
         echo "  /dev/shm is only $((_shm_kb / 1024))M. Steam's interface is Chromium and"
-        echo "  needs far more, which is why it dies on mmap. This is Docker's default"
-        echo "  and nothing inside the container can change it. On the node, put"
-        echo "  {\"default-shm-size\": \"1G\"} in /etc/docker/daemon.json and restart"
-        echo "  Docker, or set ShmSize on the container. Steam verifies its own files,"
-        echo "  so patching its binary is not an option: it reinstalls them."
+        echo "  needs far more, which is why it dies on mmap. Nothing inside the"
+        echo "  container can raise it, and Steam verifies its own files, so patching"
+        echo "  its binary does not work either: it reinstalls them."
+        echo "  The panel sets this per container, sized from the server's memory."
+        echo "  A node still showing 64M is running a daemon from before that landed."
     fi
 
     echo "  Its own words:"
