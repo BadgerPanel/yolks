@@ -189,6 +189,101 @@ else
     fi
 fi
 
+# ---- updates ----
+# Pinning a build always wins, and any failure here leaves the installed build
+# alone. An update that cannot be trusted is not applied.
+RELEASE_REPO="${RELEASE_REPO:-spudgun1001/fusion-dedicated}"
+VERSION_FILE=/home/container/.fusion-version
+ARCHIVE_NAME=fusion-dedicated-linux-x64.tar.gz
+
+# The releases API allows 60 requests an hour per address, which a node running
+# a few of these would exhaust. The redirect from /releases/latest carries the
+# tag and has no such limit.
+latest_release_tag() {
+    curl -fsSLI -o /dev/null -w "%{url_effective}" \
+        "https://github.com/${RELEASE_REPO}/releases/latest" 2>/dev/null \
+        | sed -n "s|.*/releases/tag/||p"
+}
+
+update_server() {
+    _installed=$(cat "${VERSION_FILE}" 2>/dev/null)
+    _latest=$(latest_release_tag)
+
+    if [ -z "${_latest}" ]; then
+        echo "Could not reach GitHub, so the update check is skipped."
+        return 1
+    fi
+
+    if [ "${_latest}" = "${_installed}" ]; then
+        echo "Server is up to date (${_installed})."
+        return 1
+    fi
+
+    echo "A newer server is available: ${_installed:-unknown} -> ${_latest}. Fetching it..."
+
+    _tmp=$(mktemp -d /home/container/.update.XXXXXX 2>/dev/null) || {
+        echo "Could not make a working directory for the update; keeping what is here."
+        return 1
+    }
+
+    _base="https://github.com/${RELEASE_REPO}/releases/download/${_latest}"
+
+    # Everything below verifies before it replaces, so a bad download or a
+    # truncated archive leaves the running build untouched.
+    if ! curl -fsSL -o "${_tmp}/${ARCHIVE_NAME}" "${_base}/${ARCHIVE_NAME}" \
+        || ! curl -fsSL -o "${_tmp}/SHA256SUMS" "${_base}/SHA256SUMS"; then
+        echo "The download failed, so ${_installed:-the installed build} stays."
+        rm -rf "${_tmp}"
+        return 1
+    fi
+
+    if ! (cd "${_tmp}" && sha256sum -c --ignore-missing SHA256SUMS) >/dev/null 2>&1; then
+        echo "The download did not match its checksum, so ${_installed:-the installed build} stays."
+        rm -rf "${_tmp}"
+        return 1
+    fi
+
+    mkdir -p "${_tmp}/unpacked"
+
+    if ! tar -xzf "${_tmp}/${ARCHIVE_NAME}" -C "${_tmp}/unpacked" 2>/dev/null; then
+        echo "The archive would not unpack, so ${_installed:-the installed build} stays."
+        rm -rf "${_tmp}"
+        return 1
+    fi
+
+    if [ ! -f "${_tmp}/unpacked/fusiondedicated.dll" ]; then
+        echo "The archive held no server, so ${_installed:-the installed build} stays."
+        rm -rf "${_tmp}"
+        return 1
+    fi
+
+    # The release carries the server and the example files, never server.json,
+    # blocklist.json, bans.json, ranks, logs or metrics, so this cannot tread on
+    # anything the owner has set.
+    if ! cp -a "${_tmp}/unpacked/." /home/container/ 2>/dev/null; then
+        echo "The update could not be written; ${_installed:-the installed build} may be incomplete."
+        rm -rf "${_tmp}"
+        return 1
+    fi
+
+    echo "${_latest}" > "${VERSION_FILE}"
+    rm -rf "${_tmp}"
+
+    echo "Updated the server to ${_latest}."
+    return 0
+}
+
+# Leftovers from an update that died partway, so they do not accumulate.
+rm -rf /home/container/.update.* 2>/dev/null
+
+if [ -n "${FUSION_BUILD}" ] && [ "${FUSION_BUILD}" != "latest" ]; then
+    echo "Server pinned to ${FUSION_BUILD}, so updates are off. Reinstall to change it."
+elif [ "$(as_bool "${AUTO_UPDATE}" true)" = "true" ]; then
+    update_server || true
+else
+    echo "Automatic updates are off. Installed: $(cat "${VERSION_FILE}" 2>/dev/null || echo unknown)."
+fi
+
 # ---- user namespaces ----
 # Tested by asking the kernel for a namespace rather than reading a sysctl,
 # because the governing setting differs between distributions. A missing unshare
