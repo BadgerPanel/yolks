@@ -319,12 +319,16 @@ if command -v unshare >/dev/null 2>&1 && ! unshare --user --map-root-user true >
         echo "then run sysctl --system."
     else
         echo ""
-        echo "The host allows namespaces, so it is this container refusing. Docker's"
-        echo "default seccomp profile blocks CLONE_NEWUSER whatever the sysctls say."
+        echo "The host allows namespaces, so it is this container refusing, and two"
+        echo "separate things do it whatever the sysctls say. Docker's seccomp profile"
+        echo "denies CLONE_NEWUSER, so the namespace is never made. Its AppArmor"
+        echo "profile denies mount, which is what bubblewrap does once it is inside"
+        echo "one. Lifting either alone moves the failure to the other."
         echo "The container needs:"
-        echo "  SecurityOpt: seccomp=unconfined"
-        echo "AppArmor can stay as it is; seccomp alone is what blocks this."
-        echo "Nothing inside the container can lift it."
+        echo "  SecurityOpt: seccomp=unconfined, apparmor=unconfined"
+        echo "Narrower versions of both work. Seccomp needs clone, clone3, setns,"
+        echo "unshare and the mount family; AppArmor needs docker-default without its"
+        echo "deny mount. Nothing inside the container can lift either."
     fi
 
     echo "Reference: https://github.com/ValveSoftware/steam-runtime/issues/297"
