@@ -51,6 +51,7 @@ jq \
   --argjson entities  "${MAX_ENTITIES:-2000}" \
   --argjson global    "$(as_bool "${GLOBAL_LISTS}" true)" \
   --argjson extended  "$(as_bool "${EXTENDED_PROTECTION}" true)" \
+  --argjson plugins   "$(as_bool "${PLUGINS_ENABLED}" false)" \
   --argjson whitelist "$(as_bool "${WHITELIST}" false)" \
   --argjson maxDamage "${MAX_REMOTE_DAMAGE:-200}" \
   --argjson antispam  "$(as_bool "${ANTISPAM}" true)" \
@@ -70,6 +71,7 @@ jq \
    | .MaxEntities = $entities
    | .GlobalListsEnabled = $global
    | .ExtendedProtection = $extended
+   | .PluginsEnabled = $plugins
    | .WhitelistEnabled = $whitelist
    | .MaxRemoteDamage = $maxDamage
    | .AntiSpamEnabled = $antispam
