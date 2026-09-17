@@ -421,7 +421,7 @@ if [[ ${HC_NUM} > 0 ]]; then
 fi
 
 # Replace Startup Command variables
-modifiedStartup=`eval echo $(echo ${STARTUP} | sed -e 's/{{/${/g' -e 's/}}/}/g')`
+modifiedStartup=$(printf '%s' "${STARTUP}" | sed -e 's/{{/${/g' -e 's/}}/}/g')
 # Convert PAR file to single-line string
 serverParams=$(sed '/^\/\//d' ${SERVER_PARAM_FILE} | tr '\n' ' ' | tr -s ' ')
 
@@ -429,9 +429,9 @@ serverParams=$(sed '/^\/\//d' ${SERVER_PARAM_FILE} | tr '\n' ' ' | tr -s ' ')
 echo -e "\n${GREEN}[STARTUP]:${NC} Starting server with the following startup parameters:"
 echo -e "${CYAN}${modifiedStartup/-par=${SERVER_PARAM_FILE}/$serverParams}${NC}\n"
 if [[ "$PARAM_NOLOGS" == "1" ]]; then
-    ${modifiedStartup}
+    eval "${modifiedStartup}"
 else
-    ${modifiedStartup} 2>&1 | tee -a "$logFile"
+    eval "${modifiedStartup}" 2>&1 | tee -a "$logFile"
 fi
 
 # Check server exit code for errors

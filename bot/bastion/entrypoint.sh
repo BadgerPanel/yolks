@@ -23,7 +23,7 @@ INTERNAL_IP=$(ip route get 1 | awk '{print $(NF-2);exit}')
 export INTERNAL_IP
 
 # Replace Startup Variables
-MODIFIED_STARTUP=$(echo -e $(echo -e ${STARTUP} | sed -e 's/{{/${/g' -e 's/}}/}/g'))
+MODIFIED_STARTUP=$(printf '%s' "${STARTUP}" | sed -e 's/{{/${/g' -e 's/}}/}/g')
 echo -e "${YELLOW}:/home/container${NC} ${MODIFIED_STARTUP}"
 
 # start mongo
@@ -36,7 +36,7 @@ mongod --fork --dbpath /home/container/mongodb/ --port 27017 --logpath /home/con
 echo -e "${BLUE}-------------------------------------------------${NC}"
 echo -e "${YELLOW}BastionBot starting...${NC}"
 echo -e "${BLUE}-------------------------------------------------${NC}"
-eval ${MODIFIED_STARTUP}
+eval "${MODIFIED_STARTUP}"
 
 # stop mongo
 mongod --eval "db.adminCommand({ "shutdown" : 1 })"

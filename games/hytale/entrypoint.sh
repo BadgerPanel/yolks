@@ -455,8 +455,8 @@ msg CYAN "Then follow the instructions shown in-game to visit: https://accounts.
 msg CYAN "and enter the code displayed by the server to complete authentication."
 line "CYAN"
 
-PARSED=$(echo "${STARTUP}" | sed -e 's/{{/${/g' -e 's/}}/}/g' | eval echo "$(cat -)")
+PARSED=$(printf '%s' "${STARTUP}" | sed -e 's/{{/${/g' -e 's/}}/}/g')
 
 printf "\033[1m\033[33mcontainer~ \033[0m"
 echo "$PARSED"
-exec env ${PARSED}
+eval "exec env ${PARSED}"

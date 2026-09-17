@@ -246,7 +246,7 @@ if [ "${SRCDS_X64}" != "1" ] && [ -z "${SRCDS_BETAID}" ] && [ ! -z "${SRCDS_APPI
 fi
 
 # Replace Startup Variables
-MODIFIED_STARTUP=$(echo ${STARTUP} | sed -e 's/{{/${/g' -e 's/}}/}/g')
+MODIFIED_STARTUP=$(printf '%s' "${STARTUP}" | sed -e 's/{{/${/g' -e 's/}}/}/g')
 
 # Prefer srcds_run_x64 - it sets up the right search paths.
 # Also force -basedir so the engine's BASE_PATH isn't empty
@@ -262,7 +262,7 @@ if [ "${SRCDS_X64}" == "1" ] && [ -f /home/container/srcds_run_x64 ]; then
     esac
 fi
 
-echo -e ":/home/container$ ${MODIFIED_STARTUP}"
+echo ":/home/container$ ${MODIFIED_STARTUP}"
 
 # Run the Server
-eval ${MODIFIED_STARTUP}
+eval "${MODIFIED_STARTUP}"

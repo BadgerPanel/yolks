@@ -185,9 +185,9 @@ if [ "${SRCDS_X64}" == "1" ] && [ ! -z ${SRCDS_APPID} ] && [ ! -f /home/containe
 fi
 
 # Replace Startup Variables
-MODIFIED_STARTUP=$(echo ${STARTUP} | sed -e 's/{{/${/g' -e 's/}}/}/g')
+MODIFIED_STARTUP=$(printf '%s' "${STARTUP}" | sed -e 's/{{/${/g' -e 's/}}/}/g')
 
 # Run the Server
 echo -e "Starting server..."
-echo -e ":/home/container$ ${MODIFIED_STARTUP}"
-eval ${MODIFIED_STARTUP}
+echo ":/home/container$ ${MODIFIED_STARTUP}"
+eval "${MODIFIED_STARTUP}"

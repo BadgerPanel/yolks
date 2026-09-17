@@ -906,7 +906,7 @@ echo "SteamAPI_Init every 5s for ten minutes. Updating on first run is normal."
 ) &
 
 # ---- run ----
-MODIFIED_STARTUP=$(echo -e ${STARTUP} | sed -e 's/{{/${/g' -e 's/}}/}/g')
-echo -e ":/home/container$ ${MODIFIED_STARTUP}"
+MODIFIED_STARTUP=$(printf '%s' "${STARTUP}" | sed -e 's/{{/${/g' -e 's/}}/}/g')
+echo ":/home/container$ ${MODIFIED_STARTUP}"
 
-eval ${MODIFIED_STARTUP}
+eval "${MODIFIED_STARTUP}"
