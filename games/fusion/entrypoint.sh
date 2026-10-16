@@ -17,6 +17,20 @@ export LD_LIBRARY_PATH=/home/container:${LD_LIBRARY_PATH}
 # run is never in doubt.
 echo "Entrypoint build: $(sha256sum "$0" 2>/dev/null | cut -c1-12 || echo unknown)"
 
+# ---- file ownership ----
+# A file the panel writes or uploads is owned by root, so this user can read it but the
+# server cannot save it. The folder is ours, so a copy moved over the file takes it back.
+# A read-only file we already own is left alone, since somebody chose that.
+for f in /home/container/*.json /home/container/plugin-data/*.json; do
+    [ -f "$f" ] && [ ! -O "$f" ] || continue
+    if cp "$f" "$f.owned" && mv -f "$f.owned" "$f"; then
+        echo "Took back ${f#/home/container/} from another owner, so the server can save it"
+    else
+        rm -f "$f.owned"
+        echo "Could not take back ${f#/home/container/}, so the server cannot save it"
+    fi
+done
+
 # ---- configuration ----
 # Applied before anything can fail, so the panel's variables reach server.json
 # even when Steam does not come up. Env vars own their own keys; everything else
