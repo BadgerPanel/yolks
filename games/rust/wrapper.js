@@ -46,8 +46,9 @@ gameProcess.on('exit', function (code, signal) {
 
 	if (code) {
 		console.log("Main game process exited with code " + code);
-		// process.exit(code);
 	}
+	// Exit with the game, or the RCON poll keeps the container up and it reads as running.
+	process.exit(code || 0);
 });
 
 function initialListener(data) {
